@@ -1,7 +1,9 @@
 (ns chess-journal3.chess
-  (:require [clojure.string :as string])
-  (:import [com.github.bhlangonijr.chesslib Board Piece]
-           [com.github.bhlangonijr.chesslib.move MoveList Move]))
+  (:require
+    [clojure.string :as string])
+  (:import
+    (com.github.bhlangonijr.chesslib Board Piece Square)
+    (com.github.bhlangonijr.chesslib.move MoveList Move)))
 
 (defn apply-move-san [fen san]
   (let [board (Board.)
@@ -10,7 +12,6 @@
     (.loadFromSan move-list san)
     (.doMove board (.removeFirst move-list))
     (.getFen board)))
-
 
 (defn get-promote-piece [to-square promote]
   (let [rank (Integer/parseInt (subs to-square 1 2))]
@@ -30,7 +31,7 @@
   (let [{:keys [to
                 from
                 promote]} move
-        board (Board.)
+        move-list (MoveList. fen)
         from-square (Square/valueOf (string/upper-case from))
         to-square (Square/valueOf (string/upper-case to))
         promotePiece (when promote
@@ -38,8 +39,8 @@
         move (if promote
                (Move. from-square to-square promotePiece)
                (Move. from-square to-square))]
-    (.loadFromFen board fen)
-    (MoveList/encodeToSan board move)))
+    (.add move-list move)
+    (.toSan move-list)))
 
 (defn apply-move [fen move]
   (let [san (move-to-san fen move)]

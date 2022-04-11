@@ -10,7 +10,7 @@
                  [http-kit "2.1.16"]
                  [clj-time "0.15.2"]
                  [org.clojure/java.jdbc "0.7.12"]
-                 [com.github.bhlangonijr/chesslib "1.1.20"]]
+                 [com.github.bhlangonijr/chesslib "1.3.3"]]
   :plugins [[lein-ring "0.12.4"]]
   :ring {:handler chess-journal3.api/app}
   :repositories [["jitpack" "https://jitpack.io"]]
