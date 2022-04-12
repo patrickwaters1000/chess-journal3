@@ -1,6 +1,5 @@
 (ns chess-journal3.db
   (:require
-    ;;[chess-journal.chess :as chess]
     [clj-time.core :as t]
     [clojure.java.jdbc :as jdbc]
     [clojure.string :as string]))
@@ -153,6 +152,65 @@ ON CONFLICT DO NOTHING;
     (println query)
     (jdbc/execute! db query)))
 
+(defn hyphenate [k]
+  (keyword (string/replace (name k) "_" "-")))
+
+(defn hyphenate-keys [m]
+  (reduce-kv (fn [acc k v]
+               (assoc acc (hyphenate k) v))
+             {}
+             m))
+
+(defn get-tagged-moves [db tag fen]
+  (let [template "
+SELECT
+  m.san AS san,
+  p2.fen AS final_fen
+FROM tagged_moves tm
+  LEFT JOIN tags t ON tm.tag_id = t.id
+  LEFT JOIN moves m ON tm.move_id = m.id
+  LEFT JOIN positions p1 ON m.initial_position_id = p1.id
+  LEFT JOIN positions p2 ON m.final_position_id = p2.id
+WHERE t.name = '%s'
+  AND p1.fen = '%s';
+"
+        query (format template tag fen)]
+    (map hyphenate-keys
+         (jdbc/query db query))))
+
+(defn update-move-tags! [db data]
+  (let [template "
+WITH v(old_tag, new_tag, initial_fen, san) AS (
+  VALUES
+    %s
+),
+input AS (
+  SELECT
+    m.id AS move_id,
+    t1.id AS old_tag_id,
+    t2.id AS new_tag_id
+  FROM v
+    LEFT JOIN tags t1 ON v.old_tag = t1.name
+    LEFT JOIN tags t2 ON v.new_tag = t2.name
+    LEFT JOIN positions p ON v.initial_fen = p.fen
+    LEFT JOIN moves m ON v.san = m.san
+      AND p.id = m.initial_position_id
+)
+UPDATE tagged_moves
+SET tag_id = input.new_tag_id
+FROM input
+WHERE tagged_moves.tag_id = input.old_tag_id
+  AND tagged_moves.move_id = input.move_id;
+"
+        values (->> data
+                    (map (fn [{:keys [old-tag new-tag initial-fen san]}]
+                           (format "('%s', '%s', '%s', '%s')"
+                                   old-tag new-tag initial-fen san)))
+                    (string/join ",\n    "))
+        query (format template values)]
+    (println query)
+    (jdbc/execute! db query)))
+
 (comment
   (defn reset! [db]
     (jdbc/execute! db "DROP TABLE IF EXISTS tagged_moves;")
@@ -163,7 +221,10 @@ ON CONFLICT DO NOTHING;
     (create-moves-table! db)
     (create-tags-table! db)
     (create-tagged-moves-table! db)
-    (db/insert-tags! db ["main-reportoire"]))
+    (db/insert-tags! db ["white-reportoire"
+                         "black-reportoire"
+                         "deleted-white-reportoire"
+                         "deleted-black-reportoire"]))
   (reset! db)
   ;;
   )

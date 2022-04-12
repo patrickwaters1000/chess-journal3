@@ -40,26 +40,69 @@
 
 (deftest inserting-tags
   (reset! db)
-  (db/insert-tags! db ["main-reportoire"])
-  (= [{:id 1 :name "main-reportoire"}]
+  (db/insert-tags! db ["white-reportoire"])
+  (= [{:id 1 :name "white-reportoire"}]
      (jdbc/query db "SELECT * FROM tags;")))
 
-(deftest inserting-tagged-moves
+(deftest hyphenating
+  (is (= :a-b-c (#'db/hyphenate :a_b_c)))
+  (is (= {:a-b-c 42} (#'db/hyphenate-keys {:a_b_c 42}))))
+
+(deftest inserting-and-getting-tagged-moves
   (reset! db)
-  (db/insert-tags! db ["main-reportoire"])
+  (db/insert-tags! db ["white-reportoire"
+                       "black-reportoire"])
   (db/insert-tagged-moves! db
-                           [{:tag "main-reportoire"
+                           [{:tag "white-reportoire"
                              :initial-fen "fen-1"
                              :final-fen "fen-2"
                              :san "e4"}
-                            {:tag "main-reportoire"
+                            {:tag "white-reportoire"
                              :initial-fen "fen-1"
                              :final-fen "fen-3"
                              :san "d4"}
-                            {:tag "main-reportoire" ;; Duplicate
+                            {:tag "white-reportoire" ;; Duplicate
                              :initial-fen "fen-1"
                              :final-fen "fen-3"
-                             :san "d4"}])
+                             :san "d4"}
+                            {:tag "black-reportoire"
+                             :initial-fen "fen-1"
+                             :final-fen "fen-4"
+                             :san "c4"}])
   (= [{:id 1 :tag_id 1 :move_id 1}
-      {:id 2 :tag_id 1 :move_id 2}]
-     (jdbc/query db "SELECT * FROM tagged_moves;")))
+      {:id 2 :tag_id 1 :move_id 2}
+      {:id 4 :tag_id 2 :move_id 4}]
+     (jdbc/query db "SELECT * FROM tagged_moves;"))
+  (= [{:san "e4" :final-fen "fen-2"}
+      {:san "d4" :final-fen "fen-3"}]
+     (db/get-tagged-moves db "white-reportoire" "fen-1")))
+
+(deftest updating-move-tags
+  (reset! db)
+  (db/insert-tags! db ["white-reportoire"
+                       "deleted-white-reportoire"])
+  (db/insert-tagged-moves! db
+                           [{:tag "white-reportoire"
+                             :initial-fen "fen-1"
+                             :final-fen "fen-2"
+                             :san "san-1"}
+                            {:tag "white-reportoire"
+                             :initial-fen "fen-1"
+                             :final-fen "fen-3"
+                             :san "san-2"}
+                            {:tag "deleted-white-reportoire"
+                             :initial-fen "fen-1"
+                             :final-fen "fen-4"
+                             :san "san-3"}])
+  (db/update-move-tags! db
+                        [{:old-tag "white-reportoire"
+                          :new-tag "deleted-white-reportoire"
+                          :initial-fen "fen-1"
+                          :san "san-2"}
+                         {:old-tag "deleted-white-reportoire"
+                          :new-tag "white-reportoire"
+                          :initial-fen "fen-1"
+                          :san "san-3"}])
+  (= [{:san "san-1" :final-fen "fen-2"}
+      {:san "san-3" :final-fen "fen-4"}]
+     (db/get-tagged-moves db "white-reportoire" "fen-1")))

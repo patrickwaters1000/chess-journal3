@@ -67,7 +67,10 @@
       (Move. from-square to-square promotePiece)
       (Move. from-square to-square))))
 
-(defn move-to-san [fen move]
+(defn move-to-san
+  [fen move]
+  {:pre [(:from move)
+         (:to move)]}
   (->> (move-to-object move)
        (object-to-san fen)))
 
@@ -103,3 +106,6 @@
 
 (defn legal-move-san? [fen san]
   (contains? (set (get-legal-move-sans fen)) san))
+
+(defn legal-move? [fen move]
+  (legal-move-san? fen (move-to-san fen move)))
