@@ -1,7 +1,7 @@
 {
-  "name": "openings",
-  "version": "1.0.0",
-  "description": "Flashcard system for studying chess openings",
+  "name": "Chess Journal 3",
+  "version": "3.0.0",
+  "description": "Software tool for studying chess",
   "main": "webpack.config.js",
   "dependencies": {
     "css-loader": "^5.0.0",
