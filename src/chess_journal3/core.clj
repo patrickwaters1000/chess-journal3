@@ -1,7 +1,7 @@
 (ns chess-journal3.core
   (:require
     [chess-journal3.chess :as chess]
-    [chess-journal3.db :as db :refer [db]]
+    [chess-journal3.db :as db]
     [chess-journal3.fen :as fen])
   (:import
     (java.util Random)))
@@ -13,7 +13,8 @@
 ;; Modes: edit, review, battle
 
 (def initial-state
-  {:fens [initial-fen]
+  {:db nil
+   :fens [initial-fen]
    :sans []
    :idx 0
    :locked-idx 0
@@ -76,17 +77,20 @@
 
 (defn add-line! [state]
   (assert (line-ends-with-opponent-to-play? state))
-  (db/insert-tagged-moves! db (get-line-data state)))
+  (db/insert-tagged-moves! (:db state)
+                           (get-line-data state)))
 
-(defn- get-db-moves [state]
-  (let [{:keys [color fen]} state
+(defn- get-moves [state]
+  (let [{:keys [db color]} state
+        fen (get-fen state)
         tag (case color
               "w" "white-reportoire"
               "b" "black-reportoire")]
-    (db/get-tagged-moves db tag fen)))
+    (db/get-tagged-moves tag fen)))
 
-(defn get-lines-in-subtree [get-moves initial-fen]
-  (let [lines (atom [])]
+(defn get-lines-in-subtree [db tag initial-fen]
+  (let [get-moves #(db/get-tagged-moves db tag %)
+        lines (atom [])]
     (loop [stack [[{:final-fen initial-fen}]]]
       (if (empty? stack)
         @lines
