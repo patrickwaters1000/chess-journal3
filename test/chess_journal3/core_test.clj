@@ -4,6 +4,7 @@
     [chess-journal3.core :as core]
     [chess-journal3.db :as db]
     [chess-journal3.db-test :as db-test :refer [db]]
+    [chess-journal3.fen :as fen]
     [clojure.test :refer [is deftest]]))
 
 (require '[clojure.java.jdbc :as jdbc])
@@ -115,3 +116,36 @@
   (is (= {}
          (core/switch-color
            {}))))
+
+(deftest checking-move-to-square-is-legal
+  (is (core/move-to-square-is-legal?
+        {:fens [fen/initial]
+         :idx 0
+         :selected-square "E2"}
+        "E4")))
+
+(deftest clicking-squares
+  (is (= "F2"
+         (:selected-square
+           (core/click-square
+             {:fens [fen/initial]
+              :idx 0
+              :selected-square nil
+              :color "w"}
+             "F2"))))
+  (is (nil?
+        (:selected-square
+          (core/click-square
+            {:fens [fen/initial]
+             :idx 0
+             :selected-square "F2"
+             :color "w"}
+            "F2"))))
+  (is (= fen-after-1e4
+         (core/get-fen
+           (core/click-square
+             {:fens [fen/initial]
+              :idx 0
+              :selected-square "E2"
+              :color "w"}
+             "E4")))))

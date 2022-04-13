@@ -10,40 +10,30 @@ const getSquareStr = (rank, file) => {
   return `${fileStr}${rank + 1}`;
 };
 
-// not used
-/*const getSquareMap = (squareStr) => {
-  let file = {
-    "A": 0, "B": 1, "C": 2, "D": 3, "E": 4, "F": 5, "G": 6, "H": 7
-  }[squareStr.charAt(0)];
-  let rank = 8 - parseInt(squareStr.charAt(1));
-  return { rank: rank, file: file };
-};*/
-
 const getPieceFn = (points) => {
-  return (props) => {
-    const pointsStr = points.map(p => {
-      let [x, y] = p;
-      let adjustedRank = (props.flipBoard ? props.rank : 7 - props.rank);
-      let adjustedFile = (props.flipBoard ? 7 - props.file : props.file);
-      let xScaled = (adjustedFile + x ) * dx;
-      let yScaled = (adjustedRank + 1 - y) * dy;
-      return `${xScaled},${yScaled}`;
-    }).join(" ");
-    return React.createElement(
-      "polygon",
-      {
-	points: pointsStr,
-	fill: props.color,
-	stroke: "#000000",
-	onClick: () => {
-	  props.clickPieceFn(
-	    (props.color == "#000000" ? "b" : "w"),
-	    getSquareStr(props.rank, props.file)
-	  );
-	}
-      }
-    );
-  };
+    return (props) => {
+        let { rank,
+              file,
+              flipBoard,
+              clickSquare } = props;
+        const pointsStr = points.map(p => {
+            let [x, y] = p;
+            let adjustedRank = (flipBoard ? rank : 7 - rank);
+            let adjustedFile = (flipBoard ? 7 - file : file);
+            let xScaled = (adjustedFile + x ) * dx;
+            let yScaled = (adjustedRank + 1 - y) * dy;
+            return `${xScaled},${yScaled}`;
+        }).join(" ");
+        return React.createElement(
+            "polygon",
+            {
+	        points: pointsStr,
+	        fill: props.color,
+	        stroke: "#000000",
+	        onClick: () => { clickSquare(getSquareStr(rank, file)); }
+            }
+        );
+    };
 };
 
 const Pawn = getPieceFn([
@@ -161,79 +151,81 @@ const King = getPieceFn([
   [0.75, 0.60],
   [0.85, 0.5],
   [0.75, 0.2],
-  [0.85, 0.15],    
+  [0.85, 0.15],
   [0.85, 0.1]
 ]);
 
 const getPiece = piece => {
-  let {pieceType, // keys listed for clarity
-       rank,
-       file,
-       clickPieceFn} = piece;
-  return {
-    'p': Pawn({...piece, color: "#000000"}),
-    'P': Pawn({...piece, color: "#ffffff"}),
-    'n': Knight({...piece, color: "#000000"}),
-    'N': Knight({...piece, color: "#ffffff"}),
-    'b': Bishop({...piece, color: "#000000"}),
-    'B': Bishop({...piece, color: "#ffffff"}),
-    'r': Rook({...piece, color: "#000000"}),
-    'R': Rook({...piece, color: "#ffffff"}),
-    'q': Queen({...piece, color: "#000000"}),
-    'Q': Queen({...piece, color: "#ffffff"}),
-    'k': King({...piece, color: "#000000"}),
-    'K': King({...piece, color: "#ffffff"}),
-  }[pieceType];
+    let { pieceType, // keys listed for clarity
+          rank,
+          file,
+          clickSquare } = piece;
+    return {
+        'p': Pawn({...piece, color: "#000000"}),
+        'P': Pawn({...piece, color: "#ffffff"}),
+        'n': Knight({...piece, color: "#000000"}),
+        'N': Knight({...piece, color: "#ffffff"}),
+        'b': Bishop({...piece, color: "#000000"}),
+        'B': Bishop({...piece, color: "#ffffff"}),
+        'r': Rook({...piece, color: "#000000"}),
+        'R': Rook({...piece, color: "#ffffff"}),
+        'q': Queen({...piece, color: "#000000"}),
+        'Q': Queen({...piece, color: "#ffffff"}),
+        'k': King({...piece, color: "#000000"}),
+        'K': King({...piece, color: "#ffffff"}),
+    }[pieceType];
 }
 
-export default class Board extends React.Component {
-  render () {
-    let props = this.props;
-    const squares = [];
-    for (let i = 0; i < 8; i++) {
-      for (let j = 0; j < 8; j++) {
-	let isSelected = (props.selectedPieceSquare
-			  == getSquareStr(j, i));
-	let fill;
-	if (isSelected) {
-	  fill = "#cc0000";
-	} else if ((i + j) % 2 == 0) {
-	  fill = "#00b33c";
-	} else {
-	  fill = "#ffffb3";
-	}
-	let square = React.createElement(
-	  "rect",
-	  {
-	    fill: fill,
-	    x: (props.flipBoard ? (7 - i) : i) * dx,
-	    y: (props.flipBoard ? j : (7 - j)) * dy,
-	    width: dx,
-	    height: dy,
-	    onClick: () => {
-	      props.clickSquareFn(
-		getSquareStr(j, i)
-	      );
-	    }
-	  }
-	);
-	squares.push(square);
-      }
+const getSquareFillColor = (i, j, isSelected) => {
+    if (isSelected) {
+	return "#cc0000";
+    } else if ((i + j) % 2 == 0) {
+	return "#00b33c";
+    } else {
+	return "#ffffb3";
     }
-    return React.createElement(
-      "svg",
-      {
-	width: 8 * dx,
-	height: 8 * dy
-      },
-      ...squares,
-      ...props.pieces.map(p => {
-	return getPiece({
-	  ...p,
-	  flipBoard: props.flipBoard,
-	  clickPieceFn: props.clickPieceFn
-	});
-      })
-    );
-  };
+};
+
+export default class Board extends React.Component {
+    render () {
+        let { pieces,
+              flipBoard,
+              clickSquare,
+              selectedSquare } = this.props;
+        const squares = [];
+        for (let i = 0; i < 8; i++) {
+            for (let j = 0; j < 8; j++) {
+                let squareStr = getSquareStr(j, i);
+	        let isSelected = (selectedSquare == squareStr);
+	        let fill = getSquareFillColor(i, j, isSelected);
+	        let square = React.createElement(
+	            "rect",
+	            {
+	                fill: fill,
+	                x: (flipBoard ? (7 - i) : i) * dx,
+	                y: (flipBoard ? j : (7 - j)) * dy,
+	                width: dx,
+	                height: dy,
+	                onClick: () => { clickSquare(getSquareStr(j, i)); }
+	            }
+	        );
+	        squares.push(square);
+            }
+        }
+        return React.createElement(
+            "svg",
+            {
+	        width: 8 * dx,
+	        height: 8 * dy
+            },
+            ...squares,
+            ...pieces.map(p => {
+	        return getPiece({
+	            ...p,
+	            flipBoard: flipBoard,
+	            clickSquare: clickSquare
+	        });
+            })
+        );
+    };
 }

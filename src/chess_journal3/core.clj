@@ -2,7 +2,8 @@
   (:require
     [chess-journal3.chess :as chess]
     [chess-journal3.db :as db]
-    [chess-journal3.fen :as fen])
+    [chess-journal3.fen :as fen]
+    [clojure.string :as string])
   (:import
     (java.util Random)))
 
@@ -12,20 +13,7 @@
 
 ;; Modes: edit, review, battle
 
-(def initial-state
-  {:db nil
-   :fens [initial-fen]
-   :sans []
-   :idx 0
-   :locked-idx 0
-   :color "w"
-   :mode "review"
-   :review-lines [] ;;
-   :modulus (.nextInt rng) ;; Determines which line we are reviewing
-   :opponent-next-move nil ;; Opponent's move that will be played after a delay
-   })
-
-(defn- get-fen [state]
+(defn get-fen [state]
   (let [{:keys [fens idx]} state]
     (nth fens idx)))
 
@@ -50,8 +38,15 @@
         new-sans (conj (subvec fens 0 idx) san)]
     (-> state
         (assoc :fens new-fens
-               :sans new-sans)
+               :sans new-sans
+               :selected-square nil)
         (update :idx inc))))
+
+(defn move-to-square-is-legal? [state square]
+  (let [{:keys [selected-square]} state
+        fen (get-fen state)]
+    ;; TODO Handle promotions
+    (chess/legal-move? fen {:from selected-square :to square})))
 
 (defn can-move? [state]
   (or (= "edit" (:mode state))
@@ -110,10 +105,10 @@
        (into #{})
        sort))
 
-(defn set-opponent-next-move [state]
+(defn set-opponents-next-move [state]
   ())
 
-(defn reset-line-to-locked-idx [state]
+(defn reset [state]
   (let [{:keys [locked-idx fens sans color mode]} state
         state* (-> state
                    (assoc :idx locked-idx
@@ -135,3 +130,40 @@
 (defn switch-color [state]
   (update state :color {"w" "b"
                         "b" "w"}))
+
+(defn player-has-piece-on-square? [state square]
+  (let [{:keys [color]} state
+        {:keys [square->piece]} (fen/parse (get-fen state))
+        piece (get square->piece square)
+        is-white-piece (when piece
+                         (= piece (string/upper-case piece)))]
+    (and piece
+         (or (and (= "w" color) is-white-piece)
+             (and (= "b" color) (not is-white-piece))))))
+
+(defn opponent-has-piece-on-square? [state square]
+  (player-has-piece-on-square? (update state :color {"w" "b"
+                                                     "b" "w"})
+                               square))
+
+(defn click-square [state square]
+  (let [{:keys [selected-square mode]} state]
+    (cond
+      (= selected-square square) (assoc state :selected-square nil)
+      (and selected-square
+           (can-move? state)
+           (move-to-square-is-legal? state square)) (move state {:from selected-square
+                                                                 :to square})
+      (and (not selected-square)
+           (or (player-has-piece-on-square? state square)
+               (and (= "edit" mode)
+                    opponent-has-piece-on-square? state square))) (assoc state :selected-square square)
+      :else state)))
+
+(defn)
+
+(defn switch-mode [state]
+  (-> state
+      (update :mode {"edit" "review"
+                     "review" "edit"})
+      reset))
