@@ -20,6 +20,9 @@ const event = (name, body) => {
     }).then(newState => {
         console.log(`New state ${JSON.stringify(newState)}`);
         handle.setState(newState);
+        if (newState.opponentMustMove) {
+            event('opponent-move');
+        }
     });
 };
 
@@ -66,11 +69,13 @@ class Page extends React.Component {
         } else if (mode == "review") {
             buttons = [
                 Button({ name: "switch-mode", text: "Edit" }),
-                Button({ name: "switch-color", text: "Switch color" })
+                Button({ name: "switch-color", text: "Switch color" }),
                 Button({ name: "switch-lock", text: (isLocked ? "Unlock" : "Lock") }),
               	Button({ name: "reset", text: "Reset" }),
                 Button({ name: "give-up", text: "Give up" }),
             ];
+        } else {
+            buttons = [];
         }
         return React.createElement(
             "div",

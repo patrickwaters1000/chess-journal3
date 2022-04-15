@@ -7,10 +7,19 @@
     [chess-journal3.fen :as fen]
     [clojure.test :refer [is deftest]]))
 
-(require '[clojure.java.jdbc :as jdbc])
+;;(require '[clojure.java.jdbc :as jdbc])
+
+(defn failing-keys [m1 m2]
+  (->> (concat (keys m1) (keys m2))
+       (into {})
+       (remove #(= (get m1 %) (get m2 %)))
+       sort))
+
+(defn fen-line [& sans] (reductions chess/apply-move-san fen/initial sans))
 
 (def initial-fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
 (def fen-after-1e4 "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1")
+(def fen-after-1e4c5 "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2")
 
 (deftest checking-whose-move-it-is
   (is (#'core/players-move? {:fens [initial-fen]
@@ -28,8 +37,12 @@
 (deftest moving
   (is (= {:fens [initial-fen fen-after-1e4]
           :sans ["e4"]
+          :mode "review"
+          :opponent-must-move true
+          :selected-square nil
           :idx 1}
          (core/move {:fens [initial-fen]
+                     :mode "review"
                      :sans []
                      :idx 0}
                     {:from "E2"
@@ -149,3 +162,55 @@
               :selected-square "E2"
               :color "w"}
              "E4")))))
+
+(deftest resetting
+  (is (= {:idx 1
+          :locked-idx 1
+          :fens [fen/initial fen-after-1e4]
+          :sans ["e4"]
+          :selected-square nil
+          :color "w"
+          :mode "review"
+          :opponent-must-move true}
+         (core/reset {:idx 2
+                      :locked-idx 1
+                      :fens [fen/initial fen-after-1e4 fen-after-1e4c5]
+                      :sans ["e4" "c5"]
+                      :selected-square "E1"
+                      :color "w"
+                      :mode "review"}))))
+
+(deftest initializing-review-mode
+  (db-test/reset! db)
+  (db/insert-tags! db ["white-reportoire"])
+  (->> [["e4" "c5" "Nf3"]
+        ["e4" "c6" "Nc3"]]
+       (run! (fn [sans]
+               (core/add-line! {:db db
+                                :color "w"
+                                :fens (reductions chess/apply-move-san fen/initial sans)
+                                :sans sans}))))
+  (is (= {:sans []
+          :color "w"
+          :db db
+          :review-lines [[{:final-fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"}
+                          {:san "e4" :final-fen "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"}
+                          {:san "c6" :final-fen "rnbqkbnr/pp1ppppp/2p5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"}
+                          {:san "Nc3" :final-fen "rnbqkbnr/pp1ppppp/2p5/8/4P3/2N5/PPPP1PPP/R1BQKBNR b KQkq - 1 2"}]
+                         [{:final-fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"}
+                          {:san "e4" :final-fen "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"}
+                          {:san "c5" :final-fen "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2"}
+                          {:san "Nf3" :final-fen "rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2"}]]
+          :mode "review"
+          :fens ["rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"]
+          :opponent-must-move false
+          :selected-square nil
+          :idx 0
+          :locked-idx 0}
+         (core/init-review-mode {:db db
+                                 :color "w"
+                                 :locked-idx 0
+                                 :fens (fen-line "e4" "e5")
+                                 :sans ["e4" "e5"]
+                                 :idx 0
+                                 :mode "edit"}))))

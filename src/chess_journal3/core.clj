@@ -29,18 +29,30 @@
 (defn- opponents-move? [state]
   (not (players-move? state)))
 
+(defn end-of-review-line? [state]
+  (let [{:keys [idx review-lines]} state]
+    (= idx (count (first review-lines)))))
+
 (defn move [state move]
-  (let [{:keys [idx fens]} state
+  (println state)
+  (let [{:keys [idx fens mode]} state
         fen (get-fen state)
         san (chess/move-to-san fen move)
         new-fen (chess/apply-move fen move)
         new-fens (conj (subvec fens 0 (inc idx)) new-fen)
-        new-sans (conj (subvec fens 0 idx) san)]
-    (-> state
-        (assoc :fens new-fens
-               :sans new-sans
-               :selected-square nil)
-        (update :idx inc))))
+        new-sans (conj (subvec fens 0 idx) san)
+        opponent-must-move (and (= "review" mode)
+                                (not (end-of-review-line?
+                                       ;; This is terrible
+                                       (update state :idx inc))))]
+    (let [new-state (-> state
+                        (assoc :fens new-fens
+                               :sans new-sans
+                               :selected-square nil
+                               :opponent-must-move opponent-must-move)
+                        (update :idx inc))]
+      (println new-state)
+      new-state)))
 
 (defn move-to-square-is-legal? [state square]
   (let [{:keys [selected-square]} state
@@ -73,7 +85,8 @@
 (defn add-line! [state]
   (assert (line-ends-with-opponent-to-play? state))
   (db/insert-tagged-moves! (:db state)
-                           (get-line-data state)))
+                           (get-line-data state))
+  state)
 
 (defn- get-moves [state]
   (let [{:keys [db color]} state
@@ -105,20 +118,16 @@
        (into #{})
        sort))
 
-(defn set-opponents-next-move [state]
-  ())
-
 (defn reset [state]
   (let [{:keys [locked-idx fens sans color mode]} state
         state* (-> state
                    (assoc :idx locked-idx
-                          :fens (subvec fens 0 (inc locked-idx))
-                          :sans (subvec sans 0 locked-idx))
-                   (update :modulus inc))]
-    (if (and (= "review" mode)
-             (opponents-move? state*))
-      (set-opponent-next-move state*)
-      state*)))
+                          :fens (vec (take (inc locked-idx) fens))
+                          :sans (vec (take locked-idx sans))
+                          :selected-square nil))
+        opponent-must-move (and (= "review" mode)
+                                (opponents-move? state*))]
+    (assoc state* :opponent-must-move opponent-must-move)))
 
 (defn lock [state]
   (let [{:keys [idx]} state]
@@ -128,8 +137,9 @@
   (assoc state :locked-idx 0))
 
 (defn switch-color [state]
-  (update state :color {"w" "b"
-                        "b" "w"}))
+  (-> state
+      (update state :color {"w" "b" "b" "w"})
+      reset))
 
 (defn player-has-piece-on-square? [state square]
   (let [{:keys [color]} state
@@ -160,10 +170,50 @@
                     opponent-has-piece-on-square? state square))) (assoc state :selected-square square)
       :else state)))
 
-(defn)
+(defn init-edit-mode [state]
+  (-> state
+      (assoc :mode "edit")
+      reset))
+
+(defn init-review-mode [state]
+  (let [lines (get-lines-in-subtree (:db state)
+                                    (case (:color state)
+                                      "w" "white-reportoire"
+                                      "b" "black-reportoire")
+                                    (get-locked-fen state))]
+    (-> state
+        (assoc :mode "review"
+               :review-lines lines)
+        reset)))
 
 (defn switch-mode [state]
-  (-> state
-      (update :mode {"edit" "review"
-                     "review" "edit"})
-      reset))
+  (case (:mode state)
+    "edit" (init-review-mode state)
+    "review" (init-edit-mode state)))
+
+(defn switch-lock [state]
+  (let [{:keys [idx locked-idx]} state]
+    (if (pos? locked-idx)
+      (assoc state :locked-idx 0)
+      (assoc state :locked-idx idx))))
+
+(defn opponent-move [state]
+  (let [{:keys [idx review-lines]} state
+        {san :san
+         fen :final-fen} (nth (first review-lines)
+                              (inc idx))]
+    (-> state
+        (update :sans conj san)
+        (update :fens conj fen)
+        (update :idx inc)
+        (assoc :opponent-must-move false))))
+
+(defn cycle [xs]
+  (conj (vec (rest xs)) (first xs)))
+
+(defn next-line [state]
+  (if (= "review" (:mode state))
+    (-> state
+        (update :review-lines cycle)
+        reset)
+    state))

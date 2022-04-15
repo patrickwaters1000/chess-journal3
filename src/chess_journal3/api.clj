@@ -9,6 +9,10 @@
     [org.httpkit.server :refer [run-server]]
     [ring.middleware.params :as rmp]))
 
+;; TODO
+;; 1. Add NOT NULL constraints to db tables.
+;; 2. Do something to ensure that the reprtoire tags are in the tags table.
+
 (def initial-state
   {:db db/db
    :fens [fen/initial]
@@ -18,9 +22,8 @@
    :locked-idx 0
    :color "w"
    :mode "review"
-   :review-lines [] ;;
-   :opponents-next-move nil ;; Opponent's move that will be played after a delay
-   })
+   :review-lines []
+   :opponents-must-move false})
 
 (def state
   (atom initial-state))
@@ -33,9 +36,9 @@
    :idx (:idx state)
    :mode (:mode state)
    :flipBoard (= "b" (:color state))
-   :isLocked (some? (:locked-idx state))
+   :isLocked (not= 0 (:locked-idx state))
    :selectedSquare (:selected-square state)
-   :opponentsNextMove (:opponents-next-move state)})
+   :opponentMustMove (:opponent-must-move state)})
 
 (defroutes app
   (GET "/" []
@@ -46,15 +49,18 @@
         (slurp "front/dist/main.js")))
   (POST "/start" _
     (do (println "Start")
+        (swap! state core/init-review-mode)
         (json/generate-string (view @state))))
   (POST "/click-square" {body :body}
     (let [square (json/parse-string (slurp body))]
       (println (format "Click square %s" square))
       (swap! state core/click-square square)
       (json/generate-string (view @state))))
+  ;; TODO
   (POST "/left" _
     (do (println "Left")
         (json/generate-string (view @state))))
+  ;; TODO
   (POST "/right" _
     (do (println "Right")
         (json/generate-string (view @state))))
@@ -64,11 +70,11 @@
         (json/generate-string (view @state))))
   (POST "/switch-lock" _
     (do (println "Lock")
-        ;; (swap! state core/switch-lock)
+        (swap! state core/switch-lock)
         (json/generate-string (view @state))))
   (POST "/switch-color" _
     (do (println "Switch color")
-        ;; (swap! state core/switch-color)
+        (swap! state core/switch-color)
         (json/generate-string (view @state))))
   (POST "/reset" _
     (do (println "Reset")
@@ -81,6 +87,10 @@
   (POST "/give-up" _
     (do (println "Give up")
         ;; (swap! state core/give-up)
+        (json/generate-string (view @state))))
+  (POST "/opponent-move" _
+    (do (println "Opponent move")
+        (swap! state core/opponent-move)
         (json/generate-string (view @state)))))
 
 (defn -main [& _]

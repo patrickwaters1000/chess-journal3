@@ -27,7 +27,7 @@
   (jdbc/execute! db "
 CREATE TABLE positions (
   id INT GENERATED ALWAYS AS IDENTITY,
-  fen VARCHAR UNIQUE,
+  fen VARCHAR UNIQUE NOT NULL,
 PRIMARY KEY(id));
 "))
 
@@ -35,9 +35,9 @@ PRIMARY KEY(id));
   (jdbc/execute! db "
 CREATE TABLE moves (
   id INT  GENERATED ALWAYS AS IDENTITY,
-  initial_position_id INT,
-  final_position_id INT,
-  san varchar,
+  initial_position_id INT NOT NULL,
+  final_position_id INT NOT NULL,
+  san varchar NOT NULL,
 PRIMARY KEY(id),
 CONSTRAINT fk_initial_position
   FOREIGN KEY(initial_position_id)
@@ -52,7 +52,7 @@ UNIQUE(initial_position_id, final_position_id));
   (jdbc/execute! db "
 CREATE TABLE tags (
   id INT GENERATED ALWAYS AS IDENTITY,
-  name TEXT,
+  name TEXT NOT NULL,
 PRIMARY KEY(id),
 UNIQUE(name));"))
 
@@ -60,8 +60,8 @@ UNIQUE(name));"))
   (jdbc/execute! db "
 CREATE TABLE tagged_moves (
   id INT GENERATED ALWAYS AS IDENTITY,
-  tag_id INT,
-  move_id INT,
+  tag_id INT NOT NULL,
+  move_id INT NOT NULL,
 PRIMARY KEY(id),
 CONSTRAINT fk_tag_id
   FOREIGN KEY(tag_id)
@@ -83,7 +83,6 @@ ON CONFLICT DO NOTHING;
                     (map #(format "('%s')" %))
                     (string/join ",\n  "))
         query (format template values)]
-    (println query)
     (jdbc/execute! db query)))
 
 (defn insert-moves! [db data]
@@ -109,7 +108,6 @@ ON CONFLICT DO NOTHING;
                                    initial-fen final-fen san)))
                     (string/join ",\n    "))
         query (format template values)]
-    (println query)
     (jdbc/execute! db query)))
 
 (defn insert-tags! [db tags]
@@ -123,7 +121,6 @@ ON CONFLICT DO NOTHING;
                     (map #(format "('%s')" %))
                     (string/join ",\n  "))
         query (format template values)]
-    (println query)
     (jdbc/execute! db query)))
 
 (defn insert-tagged-moves! [db data]
@@ -149,7 +146,6 @@ ON CONFLICT DO NOTHING;
                                    tag initial-fen san)))
                     (string/join ",\n    "))
         query (format template values)]
-    (println query)
     (jdbc/execute! db query)))
 
 (defn hyphenate [k]
@@ -208,7 +204,6 @@ WHERE tagged_moves.tag_id = input.old_tag_id
                                    old-tag new-tag initial-fen san)))
                     (string/join ",\n    "))
         query (format template values)]
-    (println query)
     (jdbc/execute! db query)))
 
 (comment
@@ -221,10 +216,10 @@ WHERE tagged_moves.tag_id = input.old_tag_id
     (create-moves-table! db)
     (create-tags-table! db)
     (create-tagged-moves-table! db)
-    (db/insert-tags! db ["white-reportoire"
-                         "black-reportoire"
-                         "deleted-white-reportoire"
-                         "deleted-black-reportoire"]))
+    (insert-tags! db ["white-reportoire"
+                      "black-reportoire"
+                      "deleted-white-reportoire"
+                      "deleted-black-reportoire"]))
   (reset! db)
   ;;
   )
