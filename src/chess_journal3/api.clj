@@ -9,9 +9,17 @@
     [org.httpkit.server :refer [run-server]]
     [ring.middleware.params :as rmp]))
 
+;; Build front end:
+;; > cd front && npx webpack
+;;
+;; Run app:
+;; > lein run -m chess-journal3.api
+;;
 ;; TODO
 ;; 4. Delete subtree
 ;; 8. Show alternative moves
+;; 9. Delete key in edit mode
+;; 10. Arrow keys in review mode
 
 (def initial-state
   {:db db/db
@@ -38,7 +46,8 @@
    :flipBoard (= "b" (:color state))
    :isLocked (not= 0 (:locked-idx state))
    :selectedSquare (:selected-square state)
-   :opponentMustMove (:opponent-must-move state)})
+   :opponentMustMove (:opponent-must-move state)
+   :alternativeMoves (core/get-alternative-moves state)})
 
 (defroutes app
   (GET "/" []
@@ -54,9 +63,12 @@
   (POST "/click-square" {body :body}
     (let [square (json/parse-string (slurp body))]
       (println (format "Click square %s" square))
-      (println (dissoc @state :review-lines))
       (swap! state core/click-square square)
-      (println (dissoc @state :review-lines))
+      (json/generate-string (view @state))))
+  (POST "/alternative-move" {body :body}
+    (let [san (json/parse-string (slurp body))]
+      (println (format "Alternative move %s" san))
+      (swap! state core/alternative-move san)
       (json/generate-string (view @state))))
   ;; TODO
   (POST "/left" _

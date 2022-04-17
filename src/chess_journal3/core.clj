@@ -101,7 +101,7 @@
         tag (case color
               "w" "white-reportoire"
               "b" "black-reportoire")]
-    (db/get-tagged-moves tag fen)))
+    (db/get-tagged-moves db tag fen)))
 
 (defn get-lines-in-subtree [db tag initial-fen]
   (let [get-moves #(db/get-tagged-moves db tag %)
@@ -211,6 +211,7 @@
       (assoc state :locked-idx 0)
       (assoc state :locked-idx idx))))
 
+;; TODO Factor this through `move`.
 (defn opponent-move [state]
   (let [{:keys [idx review-lines]} state
         {san :san
@@ -231,3 +232,36 @@
         (update :review-lines cycle)
         reset)
     state))
+
+(defn get-alternative-moves [state]
+  (let [{:keys [idx mode]} state
+        san+fen-maps (cond
+                       (= "edit" mode) (get-moves state)
+                       (and (= "review" mode)
+                            (zero? idx)) []
+                       (and (= "review" mode)
+                            (pos? idx)) (-> state
+                                            (update :idx dec)
+                                            get-moves))]
+    (map :san san+fen-maps)))
+
+(defn undo-last-move [state]
+  (let [{:keys [fens sans]} state
+        new-fens (vec (drop-last fens))
+        new-sans (vec (drop-last sans))
+        new-idx (dec (count new-fens))]
+    (assoc state
+      :fens new-fens
+      :sans new-sans
+      :idx new-idx)))
+
+(defn alternative-move [state san]
+  (let [{:keys [mode]} state
+        state* (if (= "review" mode)
+                 (undo-last-move state)
+                 state)
+        fen (get-fen state*)
+        m (chess/san-to-move fen san)]
+    (-> state*
+        (move m)
+        (assoc :opponent-must-move false))))

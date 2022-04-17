@@ -5,8 +5,8 @@ import { initialFen } from "./chessUtils.js";
 import { parseFen,
 	 getPieces } from "./Fen.js";
 
-const hflexStyle = {display: "flex", flexDirection: "row"}
-const vflexStyle = {display: "flex", flexDirection: "column"}
+const hflexStyle = { display: "flex", flexDirection: "row", flexWrap: "wrap" }
+const vflexStyle = { display: "flex", flexDirection: "column", flexWrap: "wrap" }
 
 var handle = null; // Will point to top level React component for app
 
@@ -41,6 +41,20 @@ const Button = (props) => {
   );
 };
 
+const AlternativeMoveButton = (san) => {
+    return React.createElement(
+        "button",
+        {
+            onClick: () => event("alternative-move", san),
+            style: {
+	        maxWidth: "50px",
+	        width: "50px"
+            }
+        },
+        san
+    );
+};
+
 class Page extends React.Component {
     constructor(props) {
         super(props);
@@ -55,7 +69,8 @@ class Page extends React.Component {
               mode,
               flipBoard,
 	      selectedSquare,
-              isLocked
+              isLocked,
+              alternativeMoves
 	    } = this.state;
         let buttons;
         if (mode == "edit") {
@@ -77,6 +92,7 @@ class Page extends React.Component {
         } else {
             buttons = [];
         }
+        let alternativeMoveButtons = alternativeMoves.map(AlternativeMoveButton);
         return React.createElement(
             "div",
             { style: hflexStyle },
@@ -92,7 +108,12 @@ class Page extends React.Component {
             React.createElement(
 	        "div",
 	        { style: vflexStyle },
-                ...buttons
+                ...buttons,
+                React.createElement(
+                    "div",
+                    { style: hflexStyle },
+                    ...alternativeMoveButtons
+                )
             )
         );
     };
@@ -116,7 +137,8 @@ window.addEventListener("DOMContentLoaded", () => {
         sans: [],
         idx: 0,
         flipBoard: false,
-        selectedSquare: null
+        selectedSquare: null,
+        alternativeMoves: [],
     });
     ReactDOM.render(page, div);
     event("start");
