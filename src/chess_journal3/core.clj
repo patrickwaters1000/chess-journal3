@@ -126,7 +126,6 @@
        sort))
 
 (defn reset [state]
-  (println (dissoc state :review-lines))
   (let [{:keys [locked-idx fens sans color mode]} state
         state* (-> state
                    (assoc :idx locked-idx
@@ -134,10 +133,8 @@
                           :sans (vec (take locked-idx sans))
                           :selected-square nil))
         opponent-must-move (and (= "review" mode)
-                                (opponents-move? state*))
-        state** (assoc state* :opponent-must-move opponent-must-move)]
-    (println (dissoc state** :review-lines))
-    state**))
+                                (opponents-move? state*))]
+    (assoc state* :opponent-must-move opponent-must-move)))
 
 (defn lock [state]
   (let [{:keys [idx]} state]
@@ -148,7 +145,7 @@
 
 (defn switch-color [state]
   (-> state
-      (update state :color {"w" "b" "b" "w"})
+      (update :color {"w" "b" "b" "w"})
       reset))
 
 (defn player-has-piece-on-square? [state square]
