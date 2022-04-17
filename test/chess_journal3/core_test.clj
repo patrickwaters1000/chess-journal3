@@ -7,15 +7,13 @@
     [chess-journal3.fen :as fen]
     [clojure.test :refer [is deftest]]))
 
-;;(require '[clojure.java.jdbc :as jdbc])
-
 (defn failing-keys [m1 m2]
   (->> (concat (keys m1) (keys m2))
-       (into {})
+       (into #{})
        (remove #(= (get m1 %) (get m2 %)))
        sort))
 
-(defn fen-line [& sans] (reductions chess/apply-move-san fen/initial sans))
+(defn fen-line [& sans] (vec (reductions chess/apply-move-san fen/initial sans)))
 
 (def initial-fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
 (def fen-after-1e4 "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1")
@@ -37,16 +35,56 @@
 (deftest moving
   (is (= {:fens [initial-fen fen-after-1e4]
           :sans ["e4"]
-          :mode "review"
-          :opponent-must-move true
+          :mode "edit"
+          :opponent-must-move false
           :selected-square nil
           :idx 1}
          (core/move {:fens [initial-fen]
-                     :mode "review"
+                     :mode "edit"
                      :sans []
                      :idx 0}
                     {:from "E2"
-                     :to "E4"}))))
+                     :to "E4"})))
+  (is (= {:fens [initial-fen fen-after-1e4]
+          :sans ["e4"]
+          :mode "review"
+          :opponent-must-move true
+          :selected-square nil
+          :idx 1
+          :review-lines [[{:final-fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"}
+                          {:san "e4" :final-fen "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"}
+                          {:san "c6" :final-fen "rnbqkbnr/pp1ppppp/2p5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"}
+                          {:san "Nc3" :final-fen "rnbqkbnr/pp1ppppp/2p5/8/4P3/2N5/PPPP1PPP/R1BQKBNR b KQkq - 1 2"}]]}
+         (core/move {:fens [initial-fen]
+                     :mode "review"
+                     :sans []
+                     :idx 0
+                     :review-lines [[{:final-fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"}
+                                     {:san "e4" :final-fen "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"}
+                                     {:san "c6" :final-fen "rnbqkbnr/pp1ppppp/2p5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"}
+                                     {:san "Nc3" :final-fen "rnbqkbnr/pp1ppppp/2p5/8/4P3/2N5/PPPP1PPP/R1BQKBNR b KQkq - 1 2"}]]}
+                    {:from "E2"
+                     :to "E4"})))
+  (is (= {:fens (fen-line "e4" "c6" "Nc3")
+          :sans ["e4" "c6" "Nc3"]
+          :mode "review"
+          :opponent-must-move false
+          :selected-square nil
+          :idx 3
+          :review-lines [[{:final-fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"}
+                          {:san "e4" :final-fen "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"}
+                          {:san "c6" :final-fen "rnbqkbnr/pp1ppppp/2p5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"}
+                          {:san "Nc3" :final-fen "rnbqkbnr/pp1ppppp/2p5/8/4P3/2N5/PPPP1PPP/R1BQKBNR b KQkq - 1 2"}]]}
+         (core/move {:fens (fen-line "e4" "c6")
+                     :mode "review"
+                     :sans ["e4" "c6"]
+                     :idx 2
+                     :review-lines [[{:final-fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"}
+                                     {:san "e4" :final-fen "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"}
+                                     {:san "c6" :final-fen "rnbqkbnr/pp1ppppp/2p5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"}
+                                     {:san "Nc3" :final-fen "rnbqkbnr/pp1ppppp/2p5/8/4P3/2N5/PPPP1PPP/R1BQKBNR b KQkq - 1 2"}]]}
+                    {:from "B1"
+                     :to "C3"}))))
 
 (deftest getting-line-data
   (is (= [{:tag "white-reportoire"
@@ -137,6 +175,29 @@
          :selected-square "E2"}
         "E4")))
 
+(deftest checking-move-to-square-is-correct
+  (is (core/move-to-square-is-correct?
+        {:fens [fen/initial]
+         :idx 0
+         :selected-square "E2"
+         :review-lines [[{:final-fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"}
+                         {:san "e4" :final-fen "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"}]]}
+        "E4"))
+  (is (not (core/move-to-square-is-correct?
+             {:fens [fen/initial]
+              :idx 0
+              :selected-square "E2"
+              :review-lines [[{:final-fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"}
+                              {:san "e4" :final-fen "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"}]]}
+             "E3")))
+  (is (not (core/move-to-square-is-correct?
+             {:fens [fen/initial]
+              :idx 0
+              :selected-square "E2"
+              :review-lines [[{:final-fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"}
+                              {:san "e4" :final-fen "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"}]]}
+             "E5"))))
+
 (deftest clicking-squares
   (is (= "F2"
          (:selected-square
@@ -158,9 +219,23 @@
          (core/get-fen
            (core/click-square
              {:fens [fen/initial]
+              :sans []
               :idx 0
               :selected-square "E2"
-              :color "w"}
+              :color "w"
+              :mode "edit"}
+             "E4")))
+      (= fen-after-1e4
+         (core/get-fen
+           (core/click-square
+             {:fens [fen/initial]
+              :sans []
+              :idx 0
+              :selected-square "E2"
+              :color "w"
+              :mode "review"
+              :review-lines [[{:final-fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"}
+                              {:san "e4" :final-fen "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"}]]}
              "E4")))))
 
 (deftest resetting

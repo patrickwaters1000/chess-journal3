@@ -68,4 +68,5 @@
 (deftest checking-if-move-is-legal
   (is (chess/legal-move-san? initial-fen "e4"))
   (is (not (chess/legal-move-san? initial-fen "e5")))
-  (is (chess/legal-move? initial-fen {:from "E2" :to "E4"})))
+  (is (chess/legal-move? initial-fen {:from "E2" :to "E4"}))
+  (is (not (chess/legal-move? initial-fen {:from "E2" :to "E5"}))))

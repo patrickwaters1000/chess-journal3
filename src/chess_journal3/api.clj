@@ -10,8 +10,8 @@
     [ring.middleware.params :as rmp]))
 
 ;; TODO
-;; 1. Add NOT NULL constraints to db tables.
-;; 2. Do something to ensure that the reprtoire tags are in the tags table.
+;; 4. Delete subtree
+;; 8. Show alternative moves
 
 (def initial-state
   {:db db/db
@@ -23,7 +23,7 @@
    :color "w"
    :mode "review"
    :review-lines []
-   :opponents-must-move false})
+   :opponent-must-move false})
 
 (def state
   (atom initial-state))
@@ -54,7 +54,9 @@
   (POST "/click-square" {body :body}
     (let [square (json/parse-string (slurp body))]
       (println (format "Click square %s" square))
+      (println (dissoc @state :review-lines))
       (swap! state core/click-square square)
+      (println (dissoc @state :review-lines))
       (json/generate-string (view @state))))
   ;; TODO
   (POST "/left" _
@@ -63,6 +65,7 @@
   ;; TODO
   (POST "/right" _
     (do (println "Right")
+        (swap! state core/next-line)
         (json/generate-string (view @state))))
   (POST "/switch-mode" _
     (do (println "Switch mode")
@@ -78,7 +81,7 @@
         (json/generate-string (view @state))))
   (POST "/reset" _
     (do (println "Reset")
-        ;; (swap! state core/reset)
+        (swap! state core/reset)
         (json/generate-string (view @state))))
   (POST "/add-line" _
     (do (println "Add line")

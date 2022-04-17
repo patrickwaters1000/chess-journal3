@@ -31,18 +31,17 @@
 
 (defn end-of-review-line? [state]
   (let [{:keys [idx review-lines]} state]
-    (= idx (count (first review-lines)))))
+    (= idx (dec (count (first review-lines))))))
 
 (defn move [state move]
-  (println state)
-  (let [{:keys [idx fens mode]} state
+  (let [{:keys [idx fens mode sans]} state
         fen (get-fen state)
         san (chess/move-to-san fen move)
         new-fen (chess/apply-move fen move)
         new-fens (conj (subvec fens 0 (inc idx)) new-fen)
-        new-sans (conj (subvec fens 0 idx) san)
+        new-sans (conj (subvec sans 0 idx) san)
         opponent-must-move (and (= "review" mode)
-                                (not (end-of-review-line?
+                                (not (end-of-review-line? ;;state
                                        ;; This is terrible
                                        (update state :idx inc))))]
     (let [new-state (-> state
@@ -51,7 +50,6 @@
                                :selected-square nil
                                :opponent-must-move opponent-must-move)
                         (update :idx inc))]
-      (println new-state)
       new-state)))
 
 (defn move-to-square-is-legal? [state square]
@@ -59,6 +57,15 @@
         fen (get-fen state)]
     ;; TODO Handle promotions
     (chess/legal-move? fen {:from selected-square :to square})))
+
+(defn move-to-square-is-correct? [state square]
+  (and (move-to-square-is-legal? state square)
+       (let [{:keys [selected-square review-lines idx]} state
+             fen (get-fen state)
+             san (chess/move-to-san fen {:from selected-square
+                                         :to square})
+             correct-san (:san (nth (first review-lines) (inc idx)))]
+         (= correct-san san))))
 
 (defn can-move? [state]
   (or (= "edit" (:mode state))
@@ -119,6 +126,7 @@
        sort))
 
 (defn reset [state]
+  (println (dissoc state :review-lines))
   (let [{:keys [locked-idx fens sans color mode]} state
         state* (-> state
                    (assoc :idx locked-idx
@@ -126,8 +134,10 @@
                           :sans (vec (take locked-idx sans))
                           :selected-square nil))
         opponent-must-move (and (= "review" mode)
-                                (opponents-move? state*))]
-    (assoc state* :opponent-must-move opponent-must-move)))
+                                (opponents-move? state*))
+        state** (assoc state* :opponent-must-move opponent-must-move)]
+    (println (dissoc state** :review-lines))
+    state**))
 
 (defn lock [state]
   (let [{:keys [idx]} state]
@@ -159,15 +169,19 @@
 (defn click-square [state square]
   (let [{:keys [selected-square mode]} state]
     (cond
-      (= selected-square square) (assoc state :selected-square nil)
+      (or (= selected-square square)
+          (and selected-square
+               (= "review" mode)
+               (not (move-to-square-is-correct? state square)))) (assoc state :selected-square nil)
       (and selected-square
            (can-move? state)
-           (move-to-square-is-legal? state square)) (move state {:from selected-square
-                                                                 :to square})
-      (and (not selected-square)
-           (or (player-has-piece-on-square? state square)
-               (and (= "edit" mode)
-                    opponent-has-piece-on-square? state square))) (assoc state :selected-square square)
+           (if (= "edit" mode)
+             (move-to-square-is-legal? state square)
+             (move-to-square-is-correct? state square))) (move state {:from selected-square
+                                                                      :to square})
+      (or (player-has-piece-on-square? state square)
+          (and (= "edit" mode)
+               opponent-has-piece-on-square? state square)) (assoc state :selected-square square)
       :else state)))
 
 (defn init-edit-mode [state]

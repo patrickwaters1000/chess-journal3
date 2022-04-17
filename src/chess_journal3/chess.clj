@@ -108,4 +108,7 @@
   (contains? (set (get-legal-move-sans fen)) san))
 
 (defn legal-move? [fen move]
-  (legal-move-san? fen (move-to-san fen move)))
+  (contains? (->> (get-legal-move-sans fen)
+                  (map (partial san-to-move fen))
+                  (into #{}))
+             move))
