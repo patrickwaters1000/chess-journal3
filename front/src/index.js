@@ -19,6 +19,9 @@ const event = (name, body) => {
         return resp.json();
     }).then(newState => {
         console.log(`New state ${JSON.stringify(newState)}`);
+        if (newState.error) {
+            window.alert(newState.error);
+        }
         handle.setState(newState);
         if (newState.opponentMustMove) {
             event('opponent-move');
@@ -27,18 +30,28 @@ const event = (name, body) => {
 };
 
 const Button = (props) => {
-  let { name, text } = props;
-  return React.createElement(
+    let { name, text, confirm } = props;
+    let onClick;
+    if (confirm) {
+        onClick = () => {
+            if (window.confirm("Are you sure?")) {
+                event(name);
+            }
+        };
+    } else {
+        onClick = () => { event(name); };
+    }
+    return React.createElement(
     "button",
-    {
-      onClick: () => event(name),
-      style: {
-	maxWidth: "150px",
-	width: "150px"
-      }
-    },
-    text
-  );
+        {
+            onClick: onClick,
+            style: {
+	        maxWidth: "150px",
+	        width: "150px"
+            }
+        },
+        text
+    );
 };
 
 const AlternativeMoveButton = (san) => {
@@ -80,6 +93,7 @@ class Page extends React.Component {
                 Button({ name: "switch-lock", text: (isLocked ? "Unlock" : "Lock") }),
                 Button({ name: "reset", text: "Reset" }),
                 Button({ name: "add-line", text: "Add line" }),
+                Button({ name: "delete-subtree", text: "Delete subtree", confirm: true }),
             ];
         } else if (mode == "review") {
             buttons = [

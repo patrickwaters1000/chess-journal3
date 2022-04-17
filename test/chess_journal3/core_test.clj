@@ -289,3 +289,66 @@
                                  :sans ["e4" "e5"]
                                  :idx 0
                                  :mode "edit"}))))
+
+(deftest checking-conflicts-with-reportoire
+  (db-test/reset! db)
+  (db/insert-tags! db ["white-reportoire"])
+  (->> [["e4" "c5" "Nf3"]
+        ["e4" "c6" "Nc3"]]
+       (run! (fn [sans]
+               (core/add-line! {:db db
+                                :color "w"
+                                :fens (apply fen-line sans)
+                                :sans sans}))))
+  (is (nil? (core/line-conflicts-with-reportoire?
+              {:db db
+               :color "w"
+               :fens (fen-line "e4" "c5" "Nf3" "d6" "d4")
+               :sans ["e4" "c5" "Nf3" "d6" "d4"]})))
+  (is (= {:fullmove-counter 1 :active-color "w" :san "h4"}
+         (core/line-conflicts-with-reportoire?
+           {:db db
+            :color "w"
+            :fens (fen-line "h4" "e5" "h5")
+            :sans ["h4" "e5" "h5"]}))))
+
+(deftest deleting-current-subtree
+  (db-test/reset! db)
+  (db/insert-tags! db ["white-reportoire"
+                       "deleted-white-reportoire"])
+  (->> [["e4" "c5" "Nf3"]
+        ["e4" "c6" "Nc3"]]
+       (run! (fn [sans]
+               (core/add-line! {:db db
+                                :color "w"
+                                :fens (apply fen-line sans)
+                                :sans sans}))))
+  (let [state-1 {:db db
+                 :color "w"
+                 :fens (fen-line "e4" "c5" "Nf3")
+                 :sans ["e4" "c5" "Nf3"]
+                 :idx 3}
+        state-2 (core/delete-subtree! state-1)
+        remaining-moves-1 (db/get-tagged-moves db
+                                               "white-reportoire"
+                                               (last (fen-line "e4" "c5")))
+        remaining-moves-2 (db/get-tagged-moves db
+                                               "white-reportoire"
+                                               (last (fen-line "e4")))
+        deleted-moves (db/get-tagged-moves db
+                                           "deleted-white-reportoire"
+                                           (last (fen-line "e4" "c5")))]
+    [(= {:db {:user "pwaters" :dbtype "postgresql" :dbname "chess_journal3_test"}
+         :color "w"
+         :fens ["rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+                "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
+                "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2"]
+         :sans ["e4" "c5"]
+         :idx 2}
+        state-2)
+     (empty? remaining-moves-1)
+     (= [{:san "c5" :final-fen "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2"}
+         {:san "c6" :final-fen "rnbqkbnr/pp1ppppp/2p5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"}]
+        remaining-moves-2)
+     (= deleted-moves
+        {:san "Nf3" :final-fen "rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2"})]))

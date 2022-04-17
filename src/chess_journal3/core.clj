@@ -13,6 +13,9 @@
 
 ;; Modes: edit, review, battle
 
+(defn other-color [color]
+  (case color "w" "b" "b" "w"))
+
 (defn get-fen [state]
   (let [{:keys [fens idx]} state]
     (nth fens idx)))
@@ -32,6 +35,30 @@
 (defn end-of-review-line? [state]
   (let [{:keys [idx review-lines]} state]
     (= idx (dec (count (first review-lines))))))
+
+(defn- get-moves [state]
+  (let [{:keys [db color]} state
+        fen (get-fen state)
+        tag (case color
+              "w" "white-reportoire"
+              "b" "black-reportoire")]
+    (db/get-tagged-moves db tag fen)))
+
+(defn get-lines-in-subtree [db tag initial-fen]
+  (let [get-moves #(db/get-tagged-moves db tag %)
+        lines (atom [])]
+    (loop [stack [[{:final-fen initial-fen}]]]
+      (if (empty? stack)
+        @lines
+        (let [line (last stack)
+              fen (:final-fen (last line))
+              moves (map #(assoc % :initial-fen initial-fen)
+                         (get-moves fen))]
+          (when (empty? moves)
+            (swap! lines conj line))
+          (recur (concat (drop-last stack)
+                         (for [m moves]
+                           (conj line m)))))))))
 
 (defn move [state move]
   (let [{:keys [idx fens mode sans]} state
@@ -58,6 +85,8 @@
     ;; TODO Handle promotions
     (chess/legal-move? fen {:from selected-square :to square})))
 
+;; The "review lines" concept doesn't quite work here. If there are two moves,
+;; then there is not a single correct solution.
 (defn move-to-square-is-correct? [state square]
   (and (move-to-square-is-legal? state square)
        (let [{:keys [selected-square review-lines idx]} state
@@ -89,41 +118,67 @@
         active-color (-> fens last fen/parse :active-color)]
     (not= color active-color)))
 
-(defn add-line! [state]
-  (assert (line-ends-with-opponent-to-play? state))
-  (db/insert-tagged-moves! (:db state)
-                           (get-line-data state))
-  state)
+(defn move-conflicts-with-reportoire?
+  [state {:keys [initial-fen san]}]
+  (let [{:keys [color db]} state
+        tag (case color
+              "w" "white-reportoire"
+              "b" "black-reportoire")
+        ;; There should be 0 or 1.
+        reportoire-moves (->> (db/get-tagged-moves db tag initial-fen)
+                              (map :san)
+                              (into #{}))]
+    (and (seq reportoire-moves)
+         (not (contains? reportoire-moves san)))))
 
-(defn- get-moves [state]
-  (let [{:keys [db color]} state
-        fen (get-fen state)
+(defn line-conflicts-with-reportoire?
+  "Currently within each reportoire 'tag', there must be at most one move
+  selected for the player for each position. This makes it easier to generate a
+  list of review lines starting from a position. To add secondary moves, you
+  must add them under a separate reportoire tag, e.g.,
+  'white-reportoire-2nd-choices'.
+
+  If there is no conflict, returns `nil`; otherwise returns a map identifying
+  where the conflict starts."
+  [state]
+  (let [{:keys [color]} state
         tag (case color
               "w" "white-reportoire"
               "b" "black-reportoire")]
-    (db/get-tagged-moves db tag fen)))
+    (->> (get-line-data state)
+         (filter #(= color (-> (:initial-fen %)
+                               fen/parse
+                               :active-color)))
+         (map (fn [n m] (assoc m
+                          :fullmove-counter n
+                          :active-color color))
+              (map inc (range)))
+         (filter (partial move-conflicts-with-reportoire? state))
+         (map #(select-keys % [:fullmove-counter
+                               :active-color
+                               :san]))
+         first)))
 
-(defn get-lines-in-subtree [db tag initial-fen]
-  (let [get-moves #(db/get-tagged-moves db tag %)
-        lines (atom [])]
-    (loop [stack [[{:final-fen initial-fen}]]]
-      (if (empty? stack)
-        @lines
-        (let [line (last stack)
-              fen (:final-fen (last line))
-              moves (get-moves fen)]
-          (when (empty? moves)
-            (swap! lines conj line))
-          (recur (concat (drop-last stack)
-                         (for [m moves]
-                           (conj line m)))))))))
-
-(defn get-fens-in-subtree [get-moves initial-fen]
-  (->> (get-lines-in-subtree get-moves initial-fen)
-       (apply concat)
-       (map :final-fen)
-       (into #{})
-       sort))
+(defn add-line! [state]
+  (let [{:keys [san
+                fullmove-counter
+                active-color]
+         :as conflict} (line-conflicts-with-reportoire? state)]
+    (cond
+      (not (line-ends-with-opponent-to-play? state))
+        (assoc state
+          :error (format "Line must end with %s play"
+                         (case (:color state) "b" "white" "w" "black")))
+      (some? conflict)
+        (assoc state
+          :error (format "Line conflicts at %s. %s%s"
+                         fullmove-counter
+                         (if (= "color" "b") ".. " "")
+                         san))
+      :else
+        (do (db/insert-tagged-moves! (:db state)
+                                     (get-line-data state))
+            state))))
 
 (defn reset [state]
   (let [{:keys [locked-idx fens sans color mode]} state
@@ -262,3 +317,23 @@
     (-> state*
         (move m)
         (assoc :opponent-must-move false))))
+
+(defn delete-subtree! [state]
+  (if (or (zero? (:idx state))
+          (and (= 1 (:idx state))
+               (= "b" (:color state))))
+    (assoc state :error "Deleting the entire reportoire isn't allowed.")
+    (let [{:keys [db color]} state
+          ;; This next part is tricky, draw a move tree diagram to understand it.
+          state* (if (opponents-move? state)
+                   (undo-last-move state)
+                   state)
+          fen (get-fen (update state* :idx dec))
+          [old-tag new-tag] (case color
+                              "w" ["white-reportoire" "deleted-white-reportoire"]
+                              "b" ["black-reportoire" "deleted-black-reportoire"])]
+      (->> (get-lines-in-subtree db old-tag fen)
+           (mapcat rest)
+           (map #(assoc % :old-tag old-tag :new-tag new-tag))
+           (db/update-move-tags! db))
+      (undo-last-move state*))))

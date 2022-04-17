@@ -17,9 +17,14 @@
 ;;
 ;; TODO
 ;; 4. Delete subtree
-;; 8. Show alternative moves
 ;; 9. Delete key in edit mode
 ;; 10. Arrow keys in review mode
+;; 11. Allow giving up
+;; 12. "Review lines" concept doesn't make sense if there are two choices for
+;; the reportoire move in a given position. Fix that!
+;; 13. Support deleting subtree from review mode
+;;     a. Regenerate review lines after delete.
+;;     b. Ensure that current fen is with player to move.
 
 (def initial-state
   {:db db/db
@@ -47,7 +52,8 @@
    :isLocked (not= 0 (:locked-idx state))
    :selectedSquare (:selected-square state)
    :opponentMustMove (:opponent-must-move state)
-   :alternativeMoves (core/get-alternative-moves state)})
+   :alternativeMoves (core/get-alternative-moves state)
+   :error (:error state)})
 
 (defroutes app
   (GET "/" []
@@ -106,6 +112,10 @@
   (POST "/opponent-move" _
     (do (println "Opponent move")
         (swap! state core/opponent-move)
+        (json/generate-string (view @state))))
+  (POST "/delete-subtree" _
+    (do (println "Delete subtree")
+        (swap! state core/delete-subtree!)
         (json/generate-string (view @state)))))
 
 (defn -main [& _]
