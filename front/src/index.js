@@ -134,14 +134,23 @@ class Page extends React.Component {
 }
 
 document.addEventListener("keydown", (e) => {
-  switch (e.code) {
-  case "ArrowLeft":
-    event("left");
-    break;
-  case "ArrowRight":
-    event("right");
-    break;
-  }
+    switch (e.code) {
+    case "ArrowLeft":
+        event("left");
+        break;
+    case "ArrowRight":
+        event("right");
+        break;
+    case "Enter":
+        event("enter");
+        break;
+    case "Delete":
+        event("undo");
+        break;
+    case "Backspace":
+        event("undo");
+        break;
+    }
 });
 
 window.addEventListener("DOMContentLoaded", () => {

@@ -5,6 +5,7 @@
     [chess-journal3.db :as db]
     [chess-journal3.db-test :as db-test :refer [db]]
     [chess-journal3.fen :as fen]
+    [clojure.java.jdbc :as jdbc]
     [clojure.test :refer [is deftest]]))
 
 (defn failing-keys [m1 m2]
@@ -316,7 +317,8 @@
   (db-test/reset! db)
   (db/insert-tags! db ["white-reportoire"
                        "deleted-white-reportoire"])
-  (->> [["e4" "c5" "Nf3"]
+  (->> [["e4" "c5" "Nf3" "d6" "d4"]
+        ;;["e4" "c5" "Nf3" "f5" "exf5"]
         ["e4" "c6" "Nc3"]]
        (run! (fn [sans]
                (core/add-line! {:db db
@@ -329,26 +331,68 @@
                  :sans ["e4" "c5" "Nf3"]
                  :idx 3}
         state-2 (core/delete-subtree! state-1)
-        remaining-moves-1 (db/get-tagged-moves db
-                                               "white-reportoire"
-                                               (last (fen-line "e4" "c5")))
-        remaining-moves-2 (db/get-tagged-moves db
-                                               "white-reportoire"
-                                               (last (fen-line "e4")))
+        ;; With initial fen as after 1 e4.
+        remaining-moves (db/get-tagged-moves db
+                                             "white-reportoire"
+                                             (last (fen-line "e4")))
+        ;; With initial fen as after 1 e4.
         deleted-moves (db/get-tagged-moves db
                                            "deleted-white-reportoire"
-                                           (last (fen-line "e4" "c5")))]
+                                           (last (fen-line "e4")))]
     [(= {:db {:user "pwaters" :dbtype "postgresql" :dbname "chess_journal3_test"}
          :color "w"
          :fens ["rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-                "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
-                "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2"]
-         :sans ["e4" "c5"]
-         :idx 2}
+                "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"]
+         :sans ["e4"]
+         :idx 1}
         state-2)
-     (empty? remaining-moves-1)
-     (= [{:san "c5" :final-fen "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2"}
-         {:san "c6" :final-fen "rnbqkbnr/pp1ppppp/2p5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"}]
-        remaining-moves-2)
-     (= deleted-moves
-        {:san "Nf3" :final-fen "rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2"})]))
+     (= ["c6"]
+        (map :san remaining-moves))
+     (= ["c5"]
+        (map :san deleted-moves))
+     (= 4
+        (:n (first (jdbc/query db "
+SELECT count(*) AS n
+FROM tagged_moves tm LEFT JOIN tags t on tm.tag_id = t.id
+WHERE t.name = 'deleted-white-reportoire'"))))]))
+
+(deftest cycling-to-first-matching-line
+  (let [state {:fens (fen-line "e4" "e5" "Nf3")
+               :review-lines (for [sans [["e4" "e6" "d4"]
+                                         ["e4" "e5" "Nf3" "d6" "d4"]
+                                         ["e4" "c6" "Nc3"]]
+                                   :let [fens (apply fen-line sans)]]
+                               (for [fen fens]
+                                 {:final-fen fen}))}]
+    (is (= {:fens ["rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+                   "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
+                   "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2"
+                   "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2"]
+            :review-lines [[{:final-fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"}
+                            {:final-fen "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"}
+                            {:final-fen "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2"}
+                            {:final-fen "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2"}
+                            {:final-fen "rnbqkbnr/ppp2ppp/3p4/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 3"}
+                            {:final-fen "rnbqkbnr/ppp2ppp/3p4/4p3/3PP3/5N2/PPP2PPP/RNBQKB1R b KQkq d3 0 3"}]
+                           [{:final-fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"}
+                            {:final-fen "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"}
+                            {:final-fen "rnbqkbnr/pp1ppppp/2p5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"}
+                            {:final-fen "rnbqkbnr/pp1ppppp/2p5/8/4P3/2N5/PPPP1PPP/R1BQKBNR b KQkq - 1 2"}]
+                           [{:final-fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"}
+                            {:final-fen "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"}
+                            {:final-fen "rnbqkbnr/pppp1ppp/4p3/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"}
+                            {:final-fen "rnbqkbnr/pppp1ppp/4p3/8/3PP3/8/PPP2PPP/RNBQKBNR b KQkq d3 0 2"}]]}
+           (core/cycle-to-first-matching-line state)))))
+
+(deftest getting-trunk-of-subtree
+  (let [state {:fens (fen-line "e4" "c5" "Nf3" "d6" "d4")
+               :sans ["e4" "c5" "Nf3" "d6" "d4"]
+               :locked-idx 2}]
+    (= [{:final-fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"}
+        {:san "e4"
+         :initial-fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+         :final-fen "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"}
+        {:san "c5"
+         :initial-fen "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
+         :final-fen "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2"}]
+       (core/get-trunk-of-subtree state))))

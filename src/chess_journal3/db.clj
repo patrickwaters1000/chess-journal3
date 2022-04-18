@@ -161,6 +161,7 @@ ON CONFLICT DO NOTHING;
   (let [template "
 SELECT
   m.san AS san,
+  p1.fen AS initial_fen,
   p2.fen AS final_fen
 FROM tagged_moves tm
   LEFT JOIN tags t ON tm.tag_id = t.id
@@ -182,21 +183,23 @@ WITH v(old_tag, new_tag, initial_fen, san) AS (
 ),
 input AS (
   SELECT
-    m.id AS move_id,
-    t1.id AS old_tag_id,
+    tm.id AS tagged_move_id,
     t2.id AS new_tag_id
   FROM v
     LEFT JOIN tags t1 ON v.old_tag = t1.name
     LEFT JOIN tags t2 ON v.new_tag = t2.name
     LEFT JOIN positions p ON v.initial_fen = p.fen
-    LEFT JOIN moves m ON v.san = m.san
+    LEFT JOIN moves m
+      ON v.san = m.san
       AND p.id = m.initial_position_id
+    LEFT JOIN tagged_moves tm
+      ON t1.id = tm.tag_id
+      AND m.id = tm.move_id
 )
 UPDATE tagged_moves
 SET tag_id = input.new_tag_id
 FROM input
-WHERE tagged_moves.tag_id = input.old_tag_id
-  AND tagged_moves.move_id = input.move_id;
+WHERE tagged_moves.id = input.tagged_move_id;
 "
         values (->> data
                     (map (fn [{:keys [old-tag new-tag initial-fen san]}]

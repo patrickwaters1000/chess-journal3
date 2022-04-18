@@ -4,8 +4,8 @@
 
 (def initial "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
 
-(def regex #"([\S]+) (w|b) ([KQkq]+) ([\-\w\d]+) (\d+) (\d+)")
-
+(def regex #"([\S]+) (w|b) ([\-KQkq]+) ([\-\w\d]+) (\d+) (\d+)")
+"rnbq1rk1/pp2nppp/2pb4/3p4/2PP4/2NB1N2/PP3PPP/R1BQ1RK1 b - - 5 8"
 (def pieces #{"p" "n" "b" "r" "q" "k"
               "P" "N" "B" "R" "Q" "K"})
 

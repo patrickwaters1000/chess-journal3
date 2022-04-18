@@ -24,6 +24,18 @@
   (let [{:keys [fens locked-idx]} state]
     (nth fens locked-idx)))
 
+(defn next-frame [state]
+  (let [{:keys [idx fens]} state]
+    (if (< idx (count fens))
+      (update state :idx inc)
+      state)))
+
+(defn previous-frame [state]
+  (let [{:keys [idx]} state]
+    (if (pos? idx)
+      (update state :idx dec)
+      state)))
+
 (defn- players-move? [state]
   (let [{:keys [color]} state
         active-color (-> state get-fen fen/parse :active-color)]
@@ -32,6 +44,7 @@
 (defn- opponents-move? [state]
   (not (players-move? state)))
 
+;; Expects review line to start from initial position.
 (defn end-of-review-line? [state]
   (let [{:keys [idx review-lines]} state]
     (= idx (dec (count (first review-lines))))))
@@ -44,7 +57,17 @@
               "b" "black-reportoire")]
     (db/get-tagged-moves db tag fen)))
 
-(defn get-lines-in-subtree [db tag initial-fen]
+(defn get-trunk-of-subtree [state]
+  (let [{:keys [sans fens locked-idx]} state]
+    (->> (map (fn [san initial-fen]
+                {:san san
+                 :initial-fen initial-fen
+                 :final-fen (chess/apply-move-san initial-fen san)})
+              (take locked-idx sans)
+              (take locked-idx fens))
+         (cons {:final-fen fen/initial}))))
+
+(defn get-branches-of-subtree [db tag initial-fen]
   (let [get-moves #(db/get-tagged-moves db tag %)
         lines (atom [])]
     (loop [stack [[{:final-fen initial-fen}]]]
@@ -52,8 +75,7 @@
         @lines
         (let [line (last stack)
               fen (:final-fen (last line))
-              moves (map #(assoc % :initial-fen initial-fen)
-                         (get-moves fen))]
+              moves (get-moves fen)]
           (when (empty? moves)
             (swap! lines conj line))
           (recur (concat (drop-last stack)
@@ -85,8 +107,7 @@
     ;; TODO Handle promotions
     (chess/legal-move? fen {:from selected-square :to square})))
 
-;; The "review lines" concept doesn't quite work here. If there are two moves,
-;; then there is not a single correct solution.
+;; Expects review lines to start from initial position.
 (defn move-to-square-is-correct? [state square]
   (and (move-to-square-is-legal? state square)
        (let [{:keys [selected-square review-lines idx]} state
@@ -242,11 +263,16 @@
       reset))
 
 (defn init-review-mode [state]
-  (let [lines (get-lines-in-subtree (:db state)
-                                    (case (:color state)
-                                      "w" "white-reportoire"
-                                      "b" "black-reportoire")
-                                    (get-locked-fen state))]
+  (let [trunk (get-trunk-of-subtree state)
+        branches (get-branches-of-subtree (:db state)
+                                          (case (:color state)
+                                            "w" "white-reportoire"
+                                            "b" "black-reportoire")
+                                          (get-locked-fen state))
+        lines (map (fn [branch]
+                     (vec (concat (vec trunk)
+                                  (vec (rest (vec branch))))))
+                   branches)]
     (-> state
         (assoc :mode "review"
                :review-lines lines)
@@ -307,6 +333,20 @@
       :sans new-sans
       :idx new-idx)))
 
+(defn cycle-to-first-matching-line [state]
+  (loop [s state
+         retries (count (:review-lines state))]
+    (let [{:keys [idx fens review-lines]} s
+          n (count fens)]
+      (if (= fens (->> (first review-lines)
+                       (map :final-fen)
+                       (take n)))
+        s
+        (if (zero? retries)
+          (throw (Exception. "Can't find a matching line."))
+          (recur (update s :review-lines cycle)
+                 (dec retries)))))))
+
 (defn alternative-move [state san]
   (let [{:keys [mode]} state
         state* (if (= "review" mode)
@@ -316,7 +356,8 @@
         m (chess/san-to-move fen san)]
     (-> state*
         (move m)
-        (assoc :opponent-must-move false))))
+        (assoc :opponent-must-move false)
+        cycle-to-first-matching-line)))
 
 (defn delete-subtree! [state]
   (if (or (zero? (:idx state))
@@ -328,12 +369,22 @@
           state* (if (opponents-move? state)
                    (undo-last-move state)
                    state)
-          fen (get-fen (update state* :idx dec))
+          initial-fen (get-fen (update state* :idx dec))
+          final-fen (get-fen state*)
           [old-tag new-tag] (case color
                               "w" ["white-reportoire" "deleted-white-reportoire"]
                               "b" ["black-reportoire" "deleted-black-reportoire"])]
-      (->> (get-lines-in-subtree db old-tag fen)
-           (mapcat rest)
+      (->> (get-branches-of-subtree db old-tag initial-fen)
+           (map rest)
+           (filter #(= final-fen (:final-fen (first %))))
+           (apply concat)
            (map #(assoc % :old-tag old-tag :new-tag new-tag))
            (db/update-move-tags! db))
       (undo-last-move state*))))
+
+(defn give-up [state]
+  (let [{:keys [review-lines idx]} state
+        fen (get-fen state)
+        correct-san (:san (nth (first review-lines) (inc idx)))
+        correct-move (chess/san-to-move fen correct-san)]
+    (move state correct-move)))

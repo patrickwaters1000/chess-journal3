@@ -16,15 +16,13 @@
 ;; > lein run -m chess-journal3.api
 ;;
 ;; TODO
-;; 4. Delete subtree
-;; 9. Delete key in edit mode
-;; 10. Arrow keys in review mode
-;; 11. Allow giving up
-;; 12. "Review lines" concept doesn't make sense if there are two choices for
-;; the reportoire move in a given position. Fix that!
 ;; 13. Support deleting subtree from review mode
 ;;     a. Regenerate review lines after delete.
 ;;     b. Ensure that current fen is with player to move.
+;; 14. If click piece then click square, and move is illegal, square becomes selected. Fix!
+;; 16. Show sans with current last san highlighted
+;; 17. Undo move doesn't work correctly in review mode (disable it there?)
+;; 18. Shuffle review lines
 
 (def initial-state
   {:db db/db
@@ -76,14 +74,21 @@
       (println (format "Alternative move %s" san))
       (swap! state core/alternative-move san)
       (json/generate-string (view @state))))
-  ;; TODO
   (POST "/left" _
     (do (println "Left")
+        (swap! state core/previous-frame)
         (json/generate-string (view @state))))
-  ;; TODO
   (POST "/right" _
     (do (println "Right")
+        (swap! state core/next-frame)
+        (json/generate-string (view @state))))
+  (POST "/enter" _
+    (do (println "Enter")
         (swap! state core/next-line)
+        (json/generate-string (view @state))))
+  (POST "/undo" _
+    (do (println "Undo")
+        (swap! state core/undo-last-move)
         (json/generate-string (view @state))))
   (POST "/switch-mode" _
     (do (println "Switch mode")
@@ -104,10 +109,12 @@
   (POST "/add-line" _
     (do (println "Add line")
         (swap! state core/add-line!)
-        (json/generate-string (view @state))))
+        (let [resp (json/generate-string (view @state))]
+          (swap! state dissoc :error)
+          resp)))
   (POST "/give-up" _
     (do (println "Give up")
-        ;; (swap! state core/give-up)
+        (swap! state core/give-up)
         (json/generate-string (view @state))))
   (POST "/opponent-move" _
     (do (println "Opponent move")
@@ -116,7 +123,9 @@
   (POST "/delete-subtree" _
     (do (println "Delete subtree")
         (swap! state core/delete-subtree!)
-        (json/generate-string (view @state)))))
+        (let [resp (json/generate-string (view @state))]
+          (swap! state dissoc :error)
+          resp))))
 
 (defn -main [& _]
   (println "Ready!")
