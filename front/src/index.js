@@ -42,7 +42,7 @@ const Button = (props) => {
         onClick = () => { event(name); };
     }
     return React.createElement(
-    "button",
+        "button",
         {
             onClick: onClick,
             style: {
