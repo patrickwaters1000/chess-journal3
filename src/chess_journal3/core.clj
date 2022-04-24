@@ -13,6 +13,17 @@
 
 ;; Modes: edit, review, battle
 
+;; TODO Add stuff to this function and check whether the state is invalid before
+;; responding.
+(defn invalid-state?
+  "If the state is valid, returns nil. Otherwise returns a list of reasons the
+  state is invalid."
+  [state]
+  (let [{:keys [color]} state]
+    (remove nil?
+            [(when-not (contains? #{"w" "b"} color)
+               (format "Invalid color: %s." color))])))
+
 (defn other-color [color]
   (case color "w" "b" "b" "w"))
 
@@ -23,6 +34,11 @@
 (defn- get-locked-fen [state]
   (let [{:keys [fens locked-idx]} state]
     (nth fens locked-idx)))
+
+(defn- get-reportoire-tag [state]
+  (case (:color state)
+    "w" "white-reportoire"
+    "b" "black-reportoire"))
 
 (defn next-frame [state]
   (let [{:keys [idx fens]} state]
@@ -49,13 +65,11 @@
   (let [{:keys [idx review-lines]} state]
     (= idx (dec (count (first review-lines))))))
 
-(defn- get-moves [state]
-  (let [{:keys [db color]} state
-        fen (get-fen state)
-        tag (case color
-              "w" "white-reportoire"
-              "b" "black-reportoire")]
-    (db/get-tagged-moves db tag fen)))
+(defn- get-moves
+  ([state]
+   (get-moves state (get-fen state)))
+  ([state fen]
+   (get (:fen->moves state) fen)))
 
 (defn get-trunk-of-subtree [state]
   (let [{:keys [sans fens locked-idx]} state]
@@ -67,15 +81,21 @@
               (take locked-idx fens))
          (cons {:final-fen fen/initial}))))
 
-(defn get-branches-of-subtree [db tag initial-fen]
-  (let [get-moves #(db/get-tagged-moves db tag %)
-        lines (atom [])]
+(defn load-fen->moves [state]
+  (let [{:keys [db]} state
+        tag (get-reportoire-tag state)
+        data (db/get-tagged-moves db tag)
+        fen->moves (group-by :initial-fen data)]
+    (assoc state :fen->moves fen->moves)))
+
+(defn get-branches-of-subtree [state initial-fen]
+  (let [lines (atom [])]
     (loop [stack [[{:final-fen initial-fen}]]]
       (if (empty? stack)
         @lines
         (let [line (last stack)
               fen (:final-fen (last line))
-              moves (get-moves fen)]
+              moves (get-moves state fen)]
           (when (empty? moves)
             (swap! lines conj line))
           (recur (concat (drop-last stack)
@@ -122,10 +142,8 @@
       (players-move? state)))
 
 (defn get-line-data [state]
-  (let [{:keys [color fens sans]} state
-        tag (case color
-              "w" "white-reportoire"
-              "b" "black-reportoire")]
+  (let [{:keys [fens sans]} state
+        tag (get-reportoire-tag state)]
     (map (fn [[initial-fen final-fen] san]
            {:tag tag
             :initial-fen initial-fen
@@ -141,12 +159,8 @@
 
 (defn move-conflicts-with-reportoire?
   [state {:keys [initial-fen san]}]
-  (let [{:keys [color db]} state
-        tag (case color
-              "w" "white-reportoire"
-              "b" "black-reportoire")
-        ;; There should be 0 or 1.
-        reportoire-moves (->> (db/get-tagged-moves db tag initial-fen)
+  (let [;; There should be 0 or 1 reportoire moves.
+        reportoire-moves (->> (get-moves state initial-fen)
                               (map :san)
                               (into #{}))]
     (and (seq reportoire-moves)
@@ -163,9 +177,7 @@
   where the conflict starts."
   [state]
   (let [{:keys [color]} state
-        tag (case color
-              "w" "white-reportoire"
-              "b" "black-reportoire")]
+        tag (get-reportoire-tag state)]
     (->> (get-line-data state)
          (filter #(= color (-> (:initial-fen %)
                                fen/parse
@@ -179,6 +191,18 @@
                                :active-color
                                :san]))
          first)))
+
+(defn load-lines [state]
+  (let [tag (get-reportoire-tag state)
+        locked-fen (get-locked-fen state)
+        trunk (get-trunk-of-subtree state)
+        branches (get-branches-of-subtree state locked-fen)
+        lines (->> branches
+                   (map (fn [branch]
+                          (vec (concat (vec trunk)
+                                       (vec (rest (vec branch)))))))
+                   shuffle)]
+    (assoc state :review-lines lines)))
 
 (defn add-line! [state]
   (let [{:keys [san
@@ -199,9 +223,11 @@
       :else
         (do (db/insert-tagged-moves! (:db state)
                                      (get-line-data state))
-            state))))
+            (-> state
+                load-fen->moves
+                load-lines)))))
 
-(defn reset [state]
+(defn reset-board [state]
   (let [{:keys [locked-idx fens sans color mode]} state
         state* (-> state
                    (assoc :idx locked-idx
@@ -221,8 +247,8 @@
 
 (defn switch-color [state]
   (-> state
-      (update :color {"w" "b" "b" "w"})
-      reset))
+      (update :color other-color)
+      reset-board))
 
 (defn player-has-piece-on-square? [state square]
   (let [{:keys [color]} state
@@ -235,8 +261,7 @@
              (and (= "b" color) (not is-white-piece))))))
 
 (defn opponent-has-piece-on-square? [state square]
-  (player-has-piece-on-square? (update state :color {"w" "b"
-                                                     "b" "w"})
+  (player-has-piece-on-square? (update state :color other-color)
                                square))
 
 (defn click-square [state square]
@@ -260,23 +285,14 @@
 (defn init-edit-mode [state]
   (-> state
       (assoc :mode "edit")
-      reset))
+      reset-board))
 
 (defn init-review-mode [state]
-  (let [trunk (get-trunk-of-subtree state)
-        branches (get-branches-of-subtree (:db state)
-                                          (case (:color state)
-                                            "w" "white-reportoire"
-                                            "b" "black-reportoire")
-                                          (get-locked-fen state))
-        lines (map (fn [branch]
-                     (vec (concat (vec trunk)
-                                  (vec (rest (vec branch))))))
-                   branches)]
-    (-> state
-        (assoc :mode "review"
-               :review-lines lines)
-        reset)))
+  (-> state
+      load-fen->moves
+      load-lines
+      (assoc :mode "review")
+      reset-board))
 
 (defn switch-mode [state]
   (case (:mode state)
@@ -305,11 +321,9 @@
   (conj (vec (rest xs)) (first xs)))
 
 (defn next-line [state]
-  (if (= "review" (:mode state))
-    (-> state
-        (update :review-lines cycle)
-        reset)
-    state))
+  (-> state
+      (update :review-lines cycle)
+      reset-board))
 
 (defn get-alternative-moves [state]
   (let [{:keys [idx mode]} state
@@ -364,17 +378,18 @@
           (and (= 1 (:idx state))
                (= "b" (:color state))))
     (assoc state :error "Deleting the entire reportoire isn't allowed.")
-    (let [{:keys [db color]} state
-          ;; This next part is tricky, draw a move tree diagram to understand it.
+    (let [{:keys [db]} state
+          ;; This next part is tricky; draw a move tree diagram to understand it.
           state* (if (opponents-move? state)
                    (undo-last-move state)
                    state)
           initial-fen (get-fen (update state* :idx dec))
           final-fen (get-fen state*)
-          [old-tag new-tag] (case color
-                              "w" ["white-reportoire" "deleted-white-reportoire"]
-                              "b" ["black-reportoire" "deleted-black-reportoire"])]
-      (->> (get-branches-of-subtree db old-tag initial-fen)
+          old-tag (get-reportoire-tag state*)
+          new-tag (case old-tag
+                    "white-reportoire" "deleted-white-reportoire"
+                    "black-reportoire" "deleted-black-reportoire")]
+      (->> (get-branches-of-subtree state* initial-fen)
            (map rest)
            (filter #(= final-fen (:final-fen (first %))))
            (apply concat)

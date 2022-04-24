@@ -157,8 +157,25 @@ ON CONFLICT DO NOTHING;
              {}
              m))
 
-(defn get-tagged-moves [db tag fen]
-  (let [template "
+(defn get-tagged-moves
+  ([db tag]
+   (let [template "
+SELECT
+  m.san AS san,
+  p1.fen AS initial_fen,
+  p2.fen AS final_fen
+FROM tagged_moves tm
+  LEFT JOIN tags t ON tm.tag_id = t.id
+  LEFT JOIN moves m ON tm.move_id = m.id
+  LEFT JOIN positions p1 ON m.initial_position_id = p1.id
+  LEFT JOIN positions p2 ON m.final_position_id = p2.id
+WHERE t.name = '%s'
+"
+         query (format template tag)]
+     (map hyphenate-keys
+          (jdbc/query db query))))
+  ([db tag fen]
+   (let [template "
 SELECT
   m.san AS san,
   p1.fen AS initial_fen,
@@ -171,9 +188,11 @@ FROM tagged_moves tm
 WHERE t.name = '%s'
   AND p1.fen = '%s';
 "
-        query (format template tag fen)]
-    (map hyphenate-keys
-         (jdbc/query db query))))
+         query (format template tag fen)]
+     (map hyphenate-keys
+          (jdbc/query db query)))))
+
+(defn get-all-moves [db tag fen])
 
 (defn update-move-tags! [db data]
   (let [template "

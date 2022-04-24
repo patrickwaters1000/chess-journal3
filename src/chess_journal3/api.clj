@@ -17,12 +17,10 @@
 ;;
 ;; TODO
 ;; 13. Support deleting subtree from review mode
-;;     a. Regenerate review lines after delete.
+;;     a. [DONE] Regenerate review lines after delete.
 ;;     b. Ensure that current fen is with player to move.
-;; 14. If click piece then click square, and move is illegal, square becomes selected. Fix!
 ;; 16. Show sans with current last san highlighted
 ;; 17. Undo move doesn't work correctly in review mode (disable it there?)
-;; 18. Shuffle review lines
 
 (def initial-state
   {:db db/db
@@ -33,8 +31,9 @@
    :locked-idx 0
    :color "w"
    :mode "review"
+   :opponent-must-move false
    :review-lines []
-   :opponent-must-move false})
+   :fen->moves {}})
 
 (def state
   (atom initial-state))
@@ -53,79 +52,35 @@
    :alternativeMoves (core/get-alternative-moves state)
    :error (:error state)})
 
+(defn route [msg f & args]
+  (println msg)
+  (apply swap! state f args)
+  (let [resp (json/generate-string (view @state))]
+    (swap! state dissoc :error)
+    resp))
+
 (defroutes app
-  (GET "/" []
-    (do (println "Sending html")
-        (slurp "front/dist/index.html")))
-  (GET "/main.js" []
-    (do (println "Sending js")
-        (slurp "front/dist/main.js")))
-  (POST "/start" _
-    (do (println "Start")
-        (swap! state core/init-review-mode)
-        (json/generate-string (view @state))))
+  (GET "/" [] (slurp "front/dist/index.html"))
+  (GET "/main.js" [] (slurp "front/dist/main.js"))
+  (POST "/start" _ (route "Start" core/init-review-mode))
   (POST "/click-square" {body :body}
     (let [square (json/parse-string (slurp body))]
-      (println (format "Click square %s" square))
-      (swap! state core/click-square square)
-      (json/generate-string (view @state))))
+      (route (format "Click square %s" square) core/click-square square)))
   (POST "/alternative-move" {body :body}
     (let [san (json/parse-string (slurp body))]
-      (println (format "Alternative move %s" san))
-      (swap! state core/alternative-move san)
-      (json/generate-string (view @state))))
-  (POST "/left" _
-    (do (println "Left")
-        (swap! state core/previous-frame)
-        (json/generate-string (view @state))))
-  (POST "/right" _
-    (do (println "Right")
-        (swap! state core/next-frame)
-        (json/generate-string (view @state))))
-  (POST "/enter" _
-    (do (println "Enter")
-        (swap! state core/next-line)
-        (json/generate-string (view @state))))
-  (POST "/undo" _
-    (do (println "Undo")
-        (swap! state core/undo-last-move)
-        (json/generate-string (view @state))))
-  (POST "/switch-mode" _
-    (do (println "Switch mode")
-        (swap! state core/switch-mode)
-        (json/generate-string (view @state))))
-  (POST "/switch-lock" _
-    (do (println "Lock")
-        (swap! state core/switch-lock)
-        (json/generate-string (view @state))))
-  (POST "/switch-color" _
-    (do (println "Switch color")
-        (swap! state core/switch-color)
-        (json/generate-string (view @state))))
-  (POST "/reset" _
-    (do (println "Reset")
-        (swap! state core/reset)
-        (json/generate-string (view @state))))
-  (POST "/add-line" _
-    (do (println "Add line")
-        (swap! state core/add-line!)
-        (let [resp (json/generate-string (view @state))]
-          (swap! state dissoc :error)
-          resp)))
-  (POST "/give-up" _
-    (do (println "Give up")
-        (swap! state core/give-up)
-        (json/generate-string (view @state))))
-  (POST "/opponent-move" _
-    (do (println "Opponent move")
-        (swap! state core/opponent-move)
-        (json/generate-string (view @state))))
-  (POST "/delete-subtree" _
-    (do (println "Delete subtree")
-        (swap! state core/delete-subtree!)
-        (let [resp (json/generate-string (view @state))]
-          (swap! state dissoc :error)
-          resp))))
+      (route (format "Alternative move %s" san) core/alternative-move san)))
+  (POST "/left" _ (route "Left" core/previous-frame))
+  (POST "/right" _ (route "Right" core/next-frame))
+  (POST "/enter" _ (route "Next line" core/next-line))
+  (POST "/undo" _ (route "Undo" core/undo-last-move))
+  (POST "/switch-mode" _ (route "Switch mode" core/switch-mode))
+  (POST "/switch-lock" _ (route "Lock" core/switch-lock))
+  (POST "/switch-color" _ (route "Switch color" core/switch-color))
+  (POST "/reset" _ (route "Reset board" core/reset-board))
+  (POST "/add-line" _ (route "Add line" core/add-line!))
+  (POST "/give-up" _ (route "Give up" core/give-up))
+  (POST "/opponent-move" _ (route "Opponent move" core/opponent-move))
+  (POST "/delete-subtree" _ (route "Delete subtree" core/delete-subtree!)))
 
 (defn -main [& _]
   (println "Ready!")
