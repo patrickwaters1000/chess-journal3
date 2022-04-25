@@ -66,10 +66,8 @@
     (= idx (dec (count (first review-lines))))))
 
 (defn- get-moves
-  ([state]
-   (get-moves state (get-fen state)))
-  ([state fen]
-   (get (:fen->moves state) fen)))
+  ([state] (get-moves state (get-fen state)))
+  ([state fen] (get (:fen->moves state) fen)))
 
 (defn get-trunk-of-subtree [state]
   (let [{:keys [sans fens locked-idx]} state]
@@ -110,7 +108,7 @@
         new-fens (conj (subvec fens 0 (inc idx)) new-fen)
         new-sans (conj (subvec sans 0 idx) san)
         opponent-must-move (and (= "review" mode)
-                                (not (end-of-review-line? ;;state
+                                (not (end-of-review-line?
                                        ;; This is terrible
                                        (update state :idx inc))))]
     (let [new-state (-> state
@@ -204,6 +202,14 @@
                    shuffle)]
     (assoc state :review-lines lines)))
 
+(defn add-line!* [state]
+  (let [{:keys [db]} state
+        line-data (get-line-data state)]
+    (db/insert-tagged-moves! db line-data)
+    (-> state
+        load-fen->moves
+        load-lines)))
+
 (defn add-line! [state]
   (let [{:keys [san
                 fullmove-counter
@@ -220,12 +226,7 @@
                          fullmove-counter
                          (if (= "color" "b") ".. " "")
                          san))
-      :else
-        (do (db/insert-tagged-moves! (:db state)
-                                     (get-line-data state))
-            (-> state
-                load-fen->moves
-                load-lines)))))
+      :else (add-line!* state))))
 
 (defn reset-board [state]
   (let [{:keys [locked-idx fens sans color mode]} state
@@ -237,13 +238,6 @@
         opponent-must-move (and (= "review" mode)
                                 (opponents-move? state*))]
     (assoc state* :opponent-must-move opponent-must-move)))
-
-(defn lock [state]
-  (let [{:keys [idx]} state]
-    (update state :locked-idx idx)))
-
-(defn unlock [state]
-  (assoc state :locked-idx 0))
 
 (defn switch-color [state]
   (-> state
@@ -300,10 +294,11 @@
     "review" (init-edit-mode state)))
 
 (defn switch-lock [state]
-  (let [{:keys [idx locked-idx]} state]
-    (if (pos? locked-idx)
-      (assoc state :locked-idx 0)
-      (assoc state :locked-idx idx))))
+  (let [{:keys [idx locked-idx]} state
+        new-locked-idx (if (pos? locked-idx) 0 idx)]
+    (-> state
+        (assoc :locked-idx new-locked-idx)
+        load-lines)))
 
 ;; TODO Factor this through `move`.
 (defn opponent-move [state]
@@ -325,17 +320,28 @@
       (update :review-lines cycle)
       reset-board))
 
+(defn matches-current-line [state line]
+  (let [{:keys [idx]} state]
+    (and (<= 0 idx)
+         (< idx (count line))
+         (= (get-fen state)
+            (:final-fen (nth line idx))))))
+
 (defn get-alternative-moves [state]
-  (let [{:keys [idx mode]} state
-        san+fen-maps (cond
-                       (= "edit" mode) (get-moves state)
-                       (and (= "review" mode)
-                            (zero? idx)) []
-                       (and (= "review" mode)
-                            (pos? idx)) (-> state
-                                            (update :idx dec)
-                                            get-moves))]
-    (map :san san+fen-maps)))
+  (let [{:keys [review-lines mode idx]} state
+        offset (case mode
+                 "review" 0
+                 "edit" 1)]
+    (->> review-lines
+         (filter (partial matches-current-line
+                          ;; Terrible
+                          (cond-> state
+                            (= mode "review") (update :idx dec))))
+         (map #(nth % (+ idx offset)))
+         (group-by :san)
+         (map (fn [[san lines]]
+                {:san san
+                 :lines (count lines)})))))
 
 (defn undo-last-move [state]
   (let [{:keys [fens sans]} state

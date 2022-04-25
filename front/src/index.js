@@ -54,7 +54,9 @@ const Button = (props) => {
     );
 };
 
-const AlternativeMoveButton = (san) => {
+const AlternativeMoveButton = (data) => {
+    let { san,
+          lines } = data;
     return React.createElement(
         "button",
         {
@@ -64,7 +66,7 @@ const AlternativeMoveButton = (san) => {
 	        width: "50px"
             }
         },
-        san
+        `${san} (${lines})`
     );
 };
 
@@ -121,7 +123,12 @@ class Page extends React.Component {
             ),
             React.createElement(
 	        "div",
-	        { style: vflexStyle },
+	        {
+                    style: {
+                        ...vflexStyle,
+                        maxWidth: 150
+                    }
+                },
                 ...buttons,
                 React.createElement(
                     "div",

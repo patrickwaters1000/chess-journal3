@@ -127,21 +127,22 @@
       moves (get-moves fen)]
   moves)
 
-(deftest getting-lines-in-subtree
+(deftest getting-branches-of-subtree
   (db-test/reset! db)
   (db/insert-tags! db ["black-reportoire"])
   (vec (for [sans [["e4" "c5" "Nf3" "d6" "d4" "cxd4"]
                    ["e4" "c5" "Nf3" "d6" "c3" "Nf6"]
                    ["e4" "c5" "c3" "Nf6" "e5" "Nd5"]]
              :let [fens (reductions chess/apply-move-san initial-fen sans)]]
-         (core/add-line! {:db db
-                          :fens fens
-                          :sans sans
-                          :color "b"
-                          :idx 0})))
-  (= (core/get-lines-in-subtree db
-                                "black-reportoire"
-                                initial-fen)
+         (core/add-line!* {:db db
+                           :fens fens
+                           :sans sans
+                           :color "b"
+                           :idx 0
+                           :locked-idx 0})))
+  (= (core/get-branches-of-subtree db
+                                   "black-reportoire"
+                                   initial-fen)
      [[{:final-fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"}
        {:san "e4" :final-fen "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"}
        {:san "c5" :final-fen "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2"}
@@ -248,13 +249,14 @@
           :color "w"
           :mode "review"
           :opponent-must-move true}
-         (core/reset {:idx 2
-                      :locked-idx 1
-                      :fens [fen/initial fen-after-1e4 fen-after-1e4c5]
-                      :sans ["e4" "c5"]
-                      :selected-square "E1"
-                      :color "w"
-                      :mode "review"}))))
+         ;; (core/reset {:idx 2
+         ;;              :locked-idx 1
+         ;;              :fens [fen/initial fen-after-1e4 fen-after-1e4c5]
+         ;;              :sans ["e4" "c5"]
+         ;;              :selected-square "E1"
+         ;;              :color "w"
+         ;;              :mode "review"})
+         )))
 
 (deftest initializing-review-mode
   (db-test/reset! db)
@@ -396,3 +398,13 @@ WHERE t.name = 'deleted-white-reportoire'"))))]))
          :initial-fen "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
          :final-fen "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2"}]
        (core/get-trunk-of-subtree state))))
+
+(deftest getting-alternate-moves
+  (let [state {:idx 1
+               :fens (fen-line "e4")
+               :sans ["e4"]
+               :mode "review"}]
+    (core/matches-current-line [{:final-fen initial-fen}
+                                {:initial-fen initial-fen
+                                 :final-fen fen-after-1e4
+                                 :san "e4"}])))

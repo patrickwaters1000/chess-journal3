@@ -21,6 +21,8 @@
 ;;     b. Ensure that current fen is with player to move.
 ;; 16. Show sans with current last san highlighted
 ;; 17. Undo move doesn't work correctly in review mode (disable it there?)
+;; 18. Add explain move feature
+;; 19. Show number of lines in review set
 
 (def initial-state
   {:db db/db
