@@ -283,10 +283,10 @@
 
 (defn init-review-mode [state]
   (-> state
-      load-fen->moves
-      load-lines
+      reset-board
       (assoc :mode "review")
-      reset-board))
+      load-fen->moves
+      load-lines))
 
 (defn switch-mode [state]
   (case (:mode state)
@@ -337,6 +337,8 @@
                           ;; Terrible
                           (cond-> state
                             (= mode "review") (update :idx dec))))
+         ;; In edit mode, when out of book, this filter prevents an error.
+         (filter #(< (+ idx offset) (count %)))
          (map #(nth % (+ idx offset)))
          (group-by :san)
          (map (fn [[san lines]]

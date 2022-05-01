@@ -404,7 +404,22 @@ WHERE t.name = 'deleted-white-reportoire'"))))]))
                :fens (fen-line "e4")
                :sans ["e4"]
                :mode "review"}]
-    (core/matches-current-line [{:final-fen initial-fen}
+    (core/matches-current-line state
+                               [{:final-fen initial-fen}
                                 {:initial-fen initial-fen
                                  :final-fen fen-after-1e4
-                                 :san "e4"}])))
+                                 :san "e4"}])
+    (let [line [{:final-fen initial-fen}
+                {:initial-fen initial-fen
+                 :final-fen fen-after-1e4
+                 :san "e4"}]
+          {:keys [idx]} state
+          fen (core/get-fen state)
+          long-enough (< idx (count line))
+          want-fen (:initial-fen (nth line idx))
+          matches-fen (when long-enough
+                        (= fen want-fen))]
+      [fen
+       want-fen
+       long-enough
+       matches-fen])))
