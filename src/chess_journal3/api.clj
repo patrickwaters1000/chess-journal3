@@ -89,3 +89,23 @@
   (println "Ready!")
   (run-server (rmp/wrap-params app)
               {:port 3000}))
+
+(comment
+  (POST "/engine" {body :body}
+        ;; Get an engine move from the curent position,
+        ;; return the new fen.
+        (let [data (json/parse-string (slurp body))
+              old-fen (sget data "fen")
+              move (.getMove @engine* old-fen @movetime*)
+              new-fen (chess/apply-move-map old-fen move)
+              {:keys [from to promote]} move
+              san (chess/move-squares-to-san
+                   old-fen from to promote)]
+          (json/generate-string
+           {:fen new-fen
+            :san san})))
+  (POST "/reset-engine" {}
+        (do (swap! engine* #(.close %))
+            (reset! engine* (engine/new-engine))))
+  ;;
+  )
