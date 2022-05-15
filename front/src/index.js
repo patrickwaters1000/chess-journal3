@@ -90,7 +90,8 @@ class Page extends React.Component {
         let buttons;
         if (mode == "edit") {
             buttons = [
-                Button({ name: "switch-mode", text: "Review" }),
+                Button({ name: "review-mode", text: "Review" }),
+                Button({ name: "battle-mode", text: "Battle" }),
                 Button({ name: "switch-color", text: "Switch color" }),
                 Button({ name: "switch-lock", text: (isLocked ? "Unlock" : "Lock") }),
                 Button({ name: "reset", text: "Reset" }),
@@ -99,11 +100,17 @@ class Page extends React.Component {
             ];
         } else if (mode == "review") {
             buttons = [
-                Button({ name: "switch-mode", text: "Edit" }),
+                Button({ name: "edit-mode", text: "Edit" }),
+                Button({ name: "battle-mode", text: "Battle" }),
                 Button({ name: "switch-color", text: "Switch color" }),
                 Button({ name: "switch-lock", text: (isLocked ? "Unlock" : "Lock") }),
               	Button({ name: "reset", text: "Reset" }),
                 Button({ name: "give-up", text: "Give up" }),
+            ];
+        } else if (mode == "battle") {
+            buttons = [
+                Button({ name: "edit-mode", text: "Edit" }),
+                Button({ name: "review-mode", text: "Review" }),
             ];
         } else {
             buttons = [];

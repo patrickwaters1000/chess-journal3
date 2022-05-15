@@ -2,6 +2,7 @@
   (:require
     [chess-journal3.chess :as chess]
     [chess-journal3.db :as db]
+    [chess-journal3.engine :as engine]
     [chess-journal3.fen :as fen]
     [clojure.string :as string])
   (:import
@@ -100,6 +101,14 @@
                          (for [m moves]
                            (conj line m)))))))))
 
+(defn opponent-must-move? [state]
+  (let [{:keys [mode]} state]
+    (or (and (= "battle" mode)
+             (opponents-move? state))
+        (and (= "review" mode)
+             (opponents-move? state)
+             (not (end-of-review-line? state))))))
+
 (defn move [state move]
   (let [{:keys [idx fens mode sans]} state
         fen (get-fen state)
@@ -107,17 +116,13 @@
         new-fen (chess/apply-move fen move)
         new-fens (conj (subvec fens 0 (inc idx)) new-fen)
         new-sans (conj (subvec sans 0 idx) san)
-        opponent-must-move (and (= "review" mode)
-                                (not (end-of-review-line?
-                                       ;; This is terrible
-                                       (update state :idx inc))))]
-    (let [new-state (-> state
-                        (assoc :fens new-fens
-                               :sans new-sans
-                               :selected-square nil
-                               :opponent-must-move opponent-must-move)
-                        (update :idx inc))]
-      new-state)))
+        new-state (-> state
+                      (assoc :fens new-fens
+                             :sans new-sans
+                             :selected-square nil)
+                      (update :idx inc))
+        opponent-must-move (opponent-must-move? new-state)]
+    (assoc new-state :opponent-must-move opponent-must-move)))
 
 (defn move-to-square-is-legal? [state square]
   (let [{:keys [selected-square]} state
@@ -239,6 +244,7 @@
                                 (opponents-move? state*))]
     (assoc state* :opponent-must-move opponent-must-move)))
 
+;; TODO update for battle mode
 (defn switch-color [state]
   (-> state
       (update :color other-color)
@@ -266,17 +272,20 @@
       (or (= selected-square square)
           (and selected-square
                (= "review" mode)
-               (not (move-to-square-is-correct? state square)))) (assoc state :selected-square nil)
+               (not (move-to-square-is-correct? state square))))
+        (assoc state :selected-square nil)
       (and selected-square
            (can-move? state)
-           (if (= "edit" mode)
-             (move-to-square-is-legal? state square)
-             (move-to-square-is-correct? state square))) (move state {:from selected-square
-                                                                      :to square})
+           (case mode
+             ("edit" "battle") (move-to-square-is-legal? state square)
+             "review" (move-to-square-is-correct? state square)))
+        (move state {:from selected-square :to square})
       (or (player-has-piece-on-square? state square)
           (and (= "edit" mode)
-               opponent-has-piece-on-square? state square)) (assoc state :selected-square square)
-      :else state)))
+               opponent-has-piece-on-square? state square))
+        (assoc state :selected-square square)
+      :else
+        state)))
 
 (defn init-edit-mode [state]
   (-> state
@@ -292,10 +301,15 @@
       (assoc :mode "review")
       reset-board))
 
-(defn switch-mode [state]
-  (case (:mode state)
-    "edit" (init-review-mode state)
-    "review" (init-edit-mode state)))
+(defn init-battle-mode [state]
+  (-> state
+      (assoc :mode "battle")))
+
+(defn switch-mode [state new-mode]
+  (case new-mode
+    "edit" (init-edit-mode state)
+    "review" (init-review-mode state)
+    "battle" (init-battle-mode state)))
 
 (defn switch-lock [state]
   (let [{:keys [idx locked-idx]} state
@@ -305,7 +319,7 @@
         load-lines)))
 
 ;; TODO Factor this through `move`.
-(defn opponent-move [state]
+(defn opponent-move-review-mode [state]
   (let [{:keys [idx review-lines]} state
         {san :san
          fen :final-fen} (nth (first review-lines)
@@ -315,6 +329,22 @@
         (update :fens conj fen)
         (update :idx inc)
         (assoc :opponent-must-move false))))
+
+(defn opponent-move-battle-mode [state]
+  (let [fen (get-fen state)
+        move (engine/get-move fen 2000)
+        san (chess/move-to-san fen move)
+        new-fen (chess/apply-move-san fen san)]
+    (-> state
+        (update :sans conj san)
+        (update :fens conj new-fen)
+        (update :idx inc)
+        (assoc :opponent-must-move false))))
+
+(defn opponent-move [state]
+  (case (:mode state)
+    "review" (opponent-move-review-mode state)
+    "battle" (opponent-move-battle-mode state)))
 
 (defn cycle [xs]
   (conj (vec (rest xs)) (first xs)))

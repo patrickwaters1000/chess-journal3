@@ -3,6 +3,7 @@
     [cheshire.core :as json]
     [chess-journal3.core :as core]
     [chess-journal3.db :as db]
+    [chess-journal3.engine :as engine]
     [chess-journal3.fen :as fen]
     [clojure.string :as string]
     [compojure.core :refer :all]
@@ -24,6 +25,7 @@
 ;; 18. Add explain move feature
 ;; 20. Right in review mode causes idx oob error
 ;; 21. Move number in alternative moves buttons
+;; 22. Having alternative moves work differently in edit mode is too confusing
 
 (def initial-state
   {:db db/db
@@ -52,7 +54,9 @@
    :isLocked (not= 0 (:locked-idx state))
    :selectedSquare (:selected-square state)
    :opponentMustMove (:opponent-must-move state)
-   :alternativeMoves (core/get-alternative-moves state)
+   :alternativeMoves (if-not (= "battle" (:mode state))
+                       (core/get-alternative-moves state)
+                       [])
    :error (:error state)})
 
 (defn route [msg f & args]
@@ -76,7 +80,9 @@
   (POST "/right" _ (route "Right" core/next-frame))
   (POST "/enter" _ (route "Next line" core/next-line))
   (POST "/undo" _ (route "Undo" core/undo-last-move))
-  (POST "/switch-mode" _ (route "Switch mode" core/switch-mode))
+  (POST "/edit-mode" _ (route "Switch mode" core/switch-mode "edit"))
+  (POST "/review-mode" _ (route "Switch mode" core/switch-mode "review"))
+  (POST "/battle-mode" _ (route "Switch mode" core/switch-mode "battle"))
   (POST "/switch-lock" _ (route "Lock" core/switch-lock))
   (POST "/switch-color" _ (route "Switch color" core/switch-color))
   (POST "/reset" _ (route "Reset board" core/reset-board))
@@ -87,25 +93,6 @@
 
 (defn -main [& _]
   (println "Ready!")
+  (engine/reset 2000)
   (run-server (rmp/wrap-params app)
               {:port 3000}))
-
-(comment
-  (POST "/engine" {body :body}
-        ;; Get an engine move from the curent position,
-        ;; return the new fen.
-        (let [data (json/parse-string (slurp body))
-              old-fen (sget data "fen")
-              move (.getMove @engine* old-fen @movetime*)
-              new-fen (chess/apply-move-map old-fen move)
-              {:keys [from to promote]} move
-              san (chess/move-squares-to-san
-                   old-fen from to promote)]
-          (json/generate-string
-           {:fen new-fen
-            :san san})))
-  (POST "/reset-engine" {}
-        (do (swap! engine* #(.close %))
-            (reset! engine* (engine/new-engine))))
-  ;;
-  )

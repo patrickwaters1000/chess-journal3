@@ -1,15 +1,18 @@
-(ns chess-journal.engine
+(ns chess-journal3.engine
   "Wrapper for inerfacing with external chess engine process according
   to Universal Chess Interface protocol."
-  (:require [chess-journal.chess :as chess]
-            [clojure.string :as string])
-  (:import [java.lang Process ProcessBuilder]
-           [java.io
-            InputStream
-            InputStreamReader
-            BufferedReader
-            OutputStream
-            Closeable]))
+  (:require
+    [clojure.string :as string])
+  (:import
+    (java.io
+      InputStream
+      InputStreamReader
+      BufferedReader
+      OutputStream
+      Closeable)
+    (java.lang Process ProcessBuilder)))
+
+;; THIS IS TERRIBLE (but works). REWRITE IT FROM SCRATCH.
 
 (definterface IEngine
   (setElo [elo])
@@ -56,11 +59,11 @@
   (let [pb (ProcessBuilder. ["stockfish"])
         p (.start pb)
         out (BufferedReader.
-             (InputStreamReader.
-              (.getInputStream p) "UTF-8"))
+              (InputStreamReader.
+                (.getInputStream p) "UTF-8"))
         err (BufferedReader.
-            (InputStreamReader.
-             (.getErrorStream p) "UTF-8"))
+              (InputStreamReader.
+                (.getErrorStream p) "UTF-8"))
         in (.getOutputStream p)]
     (map->Engine {:lock (Object.)
                   :proc p
@@ -68,16 +71,25 @@
                   :out out
                   :err err})))
 
+(def engine (atom nil))
+
+(defn reset [elo]
+  (when @engine (.close @engine))
+  (reset! engine (new-engine))
+  (.setElo @engine elo))
+
+(defn get-move [fen wait-millis]
+  (.getMove @engine fen wait-millis))
+
 (comment
+  (require '[chess-journal3.chess :as chess])
   (def e (new-engine))
   (.getMove e
             "8/8/8/3k4/8/4K3/3P4/8 w - - 0 1"
-            2000
-            )
+            2000)
   (.getMove e
             chess/initial-fen
-            2000
-            )
+            2000)
   (.close e)
   (with-open [e (new-engine)]
     (.getMove e chess/initial-fen 1000)))
