@@ -242,6 +242,8 @@
 (defn switch-color [state]
   (-> state
       (update :color other-color)
+      load-fen->moves
+      load-lines
       reset-board))
 
 (defn player-has-piece-on-square? [state square]
@@ -278,15 +280,17 @@
 
 (defn init-edit-mode [state]
   (-> state
+      load-fen->moves
+      load-lines
       (assoc :mode "edit")
       reset-board))
 
 (defn init-review-mode [state]
   (-> state
-      reset-board
-      (assoc :mode "review")
       load-fen->moves
-      load-lines))
+      load-lines
+      (assoc :mode "review")
+      reset-board))
 
 (defn switch-mode [state]
   (case (:mode state)

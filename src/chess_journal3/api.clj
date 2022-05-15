@@ -27,16 +27,16 @@
 
 (def initial-state
   {:db db/db
+   :color "w"
+   :fen->moves {}
+   :review-lines []
+   :mode "review"
+   :locked-idx 0
    :fens [fen/initial]
    :sans []
    :idx 0
    :selected-square nil
-   :locked-idx 0
-   :color "w"
-   :mode "review"
-   :opponent-must-move false
-   :review-lines []
-   :fen->moves {}})
+   :opponent-must-move false})
 
 (def state
   (atom initial-state))
