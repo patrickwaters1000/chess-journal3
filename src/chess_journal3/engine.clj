@@ -2,9 +2,13 @@
   "Wrapper for inerfacing with external chess engine process according
   to Universal Chess Interface protocol."
   (:require
+    [clj-time.core :as t]
+    [clojure.core.async :as a :refer [>! <! >!! <!! go chan buffer close! thread
+                                      alts! alts!! timeout go-loop]]
     [clojure.string :as string])
   (:import
     (java.io
+      File
       InputStream
       InputStreamReader
       BufferedReader
@@ -12,20 +16,7 @@
       Closeable)
     (java.lang Process ProcessBuilder)))
 
-;; THIS IS TERRIBLE (but works). REWRITE IT FROM SCRATCH.
-
-(definterface IEngine
-  (setElo [elo])
-  (getMove [fen millis]))
-
-(defn send-to-engine! [engine-in msg]
-  (.write engine-in (.getBytes msg))
-  (.flush engine-in))
-
-(defn get-from-engine [engine-out regex]
-  (loop [msg (.readLine engine-out)]
-    (or (re-matches regex msg)
-        (recur (.readLine engine-out)))))
+(def engine-log-file "engine-log.txt")
 
 (defn parse-uci-move
   "Parses a move from the format used by Universal Chess Interface."
@@ -34,66 +25,110 @@
         to (string/upper-case (subs uci-move-str 2 4))
         promote (when (< 4 (.length uci-move-str))
                   (string/upper-case (subs uci-move-str 4 5)))]
-    (cond-> {:from from
-             :to to}
+    (cond-> {:from from :to to}
       promote (assoc :promote promote))))
 
-(defrecord Engine [proc in out err lock]
-  IEngine
-  (getMove [_ fen wait-millis]
-    (locking lock
-      (send-to-engine! in (format "position fen %s\n" fen))
-      (send-to-engine! in (format "go movetime %s\n" wait-millis))
-      (let [regex #"^bestmove (.*) ponder (.*)$"
-            [_ move _] (get-from-engine out regex)]
-        (parse-uci-move move))))
-  (setElo [_ elo]
-    (locking lock
-      (send-to-engine! in (format "setoption name UCI_LimitStrength value true\n" elo))
-      (send-to-engine! in (format "setoption name UCI_Elo value %s\n" elo))))
+(defrecord Engine
+  [^Process p
+   in
+   out
+   err]
   Closeable
   (close [_]
-    (.destroyForcibly proc)))
+    (.destroyForcibly p)
+    (close! in)
+    (close! out)
+    (close! err)))
+
+(defn log [msg-type msg-str]
+  (spit engine-log-file
+        (format "%s %s\n%s\n\n"
+                (t/now)
+                (name msg-type)
+                msg-str)
+        :append true))
 
 (defn new-engine []
   (let [pb (ProcessBuilder. ["stockfish"])
         p (.start pb)
-        out (BufferedReader.
-              (InputStreamReader.
-                (.getInputStream p) "UTF-8"))
-        err (BufferedReader.
-              (InputStreamReader.
-                (.getErrorStream p) "UTF-8"))
-        in (.getOutputStream p)]
-    (map->Engine {:lock (Object.)
-                  :proc p
-                  :in in
-                  :out out
-                  :err err})))
+        p-out (BufferedReader.
+                (InputStreamReader.
+                  (.getInputStream p) "UTF-8"))
+        p-err (BufferedReader.
+                (InputStreamReader.
+                  (.getErrorStream p) "UTF-8"))
+        p-in (.getOutputStream p)
+        out (chan)
+        err (chan)
+        in (chan)]
+    (go-loop []
+      (when-some [msg (<! in)]
+        (log :in msg)
+        (.write p-in (.getBytes msg))
+        (.flush p-in)
+        (recur)))
+    (go (loop []
+          (let [msg (.readLine p-out)]
+            (log :out msg)
+            (when (>! out msg)
+              (recur)))))
+    (go (loop []
+          (let [msg (.readLine p-err)]
+            (log :err msg)
+            (when (>! out msg)
+              (recur)))))
+    (map->Engine
+      {:process p
+       :in in
+       :out out
+       :err err})))
+
+(defn- recieve
+  "Reads the engine's output until a line matches the regex, and returns the
+  match."
+  [^Engine e regex]
+  (loop []
+    (let [msg (<!! (:out e))]
+      (or (re-matches regex msg)
+          (recur)))))
+
+;; TODO Throw exceptions of the engine writes to stderr.
+(defn get-move* [^Engine e fen think-seconds]
+  (let [in (:in e)
+        out (:out e)
+        think-millis (int (* 1000 think-seconds))
+        fen-msg (format "position fen %s\n" fen)
+        go-msg (format "go movetime %s\n" think-millis)
+        move-regex #"^bestmove (.*) ponder .*$"]
+    (>!! in fen-msg)
+    (>!! in go-msg)
+    (let [[_ move] (recieve e move-regex)]
+      (parse-uci-move move))))
+
+(defn set-elo* [^Engine e elo]
+  (let [in (:in e)
+        msg-1 (format "setoption name UCI_LimitStrength value true\n" elo)
+        msg-2 (format "setoption name UCI_Elo value %s\n" elo)]
+    (>!! in msg-1)
+    (>!! in msg-2)))
 
 (def engine (atom nil))
 
-;;(def default-elo 3000)
-(def default-think-millis 5000)
-
 (defn reboot! []
+  (spit "" engine-log-file)
   (when @engine (.close @engine))
-  (reset! engine (new-engine))
-  ;;(.setElo @engine default-elo)
-  )
+  (reset! engine (new-engine)))
+
+(def default-think-seconds 5)
 
 (defn get-move [fen]
-  (.getMove @engine fen default-think-millis))
+  (get-move* @engine fen default-think-seconds))
+
+(defn set-elo [elo]
+  (set-elo* @engine elo))
 
 (comment
-  (require '[chess-journal3.chess :as chess])
-  (def e (new-engine))
-  (.getMove e
+  (reboot!)
+  (get-move @engine
             "8/8/8/3k4/8/4K3/3P4/8 w - - 0 1"
-            2000)
-  (.getMove e
-            chess/initial-fen
-            2000)
-  (.close e)
-  (with-open [e (new-engine)]
-    (.getMove e chess/initial-fen 1000)))
+            2000))
