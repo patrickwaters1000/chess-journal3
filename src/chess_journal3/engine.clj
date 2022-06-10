@@ -73,13 +73,17 @@
 
 (def engine (atom nil))
 
-(defn reset [elo]
+;;(def default-elo 3000)
+(def default-think-millis 5000)
+
+(defn reboot! []
   (when @engine (.close @engine))
   (reset! engine (new-engine))
-  (.setElo @engine elo))
+  ;;(.setElo @engine default-elo)
+  )
 
-(defn get-move [fen wait-millis]
-  (.getMove @engine fen wait-millis))
+(defn get-move [fen]
+  (.getMove @engine fen default-think-millis))
 
 (comment
   (require '[chess-journal3.chess :as chess])

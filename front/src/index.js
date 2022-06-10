@@ -56,17 +56,40 @@ const Button = (props) => {
 
 const AlternativeMoveButton = (data) => {
     let { san,
-          lines } = data;
+          lines,
+          score } = data;
+    let width = (score == null ? "50px" : "150px");
     return React.createElement(
         "button",
         {
             onClick: () => event("alternative-move", san),
             style: {
-	        maxWidth: "50px",
-	        width: "50px"
+	        maxWidth: width,
+	        width: width
             }
         },
-        `${san} (${lines})`
+        (score == null
+         ? `${san} (${lines})`
+         : `${san} (${lines}, ${(100 * score).toFixed(1)}%)`)
+    );
+};
+
+const GameButton = (data) => {
+    let { opponent,
+          date,
+          san,
+          tag } = data;
+    let width = "300px";
+    return React.createElement(
+        "button",
+        {
+            onClick: () => event("select-game", tag),
+            style: {
+	        maxWidth: width,
+	        width: width
+            }
+        },
+        `${opponent}, ${date} (${san})`
     );
 };
 
@@ -85,13 +108,16 @@ class Page extends React.Component {
               flipBoard,
 	      selectedSquare,
               isLocked,
-              alternativeMoves
+              alternativeMoves,
+              pgn,
+              games
 	    } = this.state;
         let buttons;
         if (mode == "edit") {
             buttons = [
                 Button({ name: "review-mode", text: "Review" }),
                 Button({ name: "battle-mode", text: "Battle" }),
+                Button({ name: "games-mode", text: "Games" }),
                 Button({ name: "switch-color", text: "Switch color" }),
                 Button({ name: "switch-lock", text: (isLocked ? "Unlock" : "Lock") }),
                 Button({ name: "reset", text: "Reset" }),
@@ -102,20 +128,35 @@ class Page extends React.Component {
             buttons = [
                 Button({ name: "edit-mode", text: "Edit" }),
                 Button({ name: "battle-mode", text: "Battle" }),
+                Button({ name: "games-mode", text: "Games" }),
                 Button({ name: "switch-color", text: "Switch color" }),
                 Button({ name: "switch-lock", text: (isLocked ? "Unlock" : "Lock") }),
               	Button({ name: "reset", text: "Reset" }),
                 Button({ name: "give-up", text: "Give up" }),
             ];
+        } else if (mode == "games") {
+            buttons = [
+                Button({ name: "review-mode", text: "Review" }),
+                Button({ name: "edit-mode", text: "Edit" }),
+                Button({ name: "battle-mode", text: "Battle" }),
+                Button({ name: "switch-color", text: "Switch color" }),
+                Button({ name: "reset", text: "Reset" }),
+            ];
         } else if (mode == "battle") {
             buttons = [
                 Button({ name: "edit-mode", text: "Edit" }),
                 Button({ name: "review-mode", text: "Review" }),
+                Button({ name: "games-mode", text: "Games" }),
+                Button({ name: "reboot-engine", text: "Reboot engine" }),
             ];
         } else {
             buttons = [];
         }
         let alternativeMoveButtons = alternativeMoves.map(AlternativeMoveButton);
+        let gameButtons = (games == null
+                           ? []
+                           : [React.createElement("p", {}, "Games:"),
+                              ...games.map(GameButton)]);
         return React.createElement(
             "div",
             { style: hflexStyle },
@@ -133,14 +174,24 @@ class Page extends React.Component {
 	        {
                     style: {
                         ...vflexStyle,
-                        maxWidth: 150
+                        maxWidth: 300
                     }
                 },
                 ...buttons,
+                 React.createElement(
+                    "p",
+                    {},
+                    pgn
+                ),
                 React.createElement(
                     "div",
                     { style: hflexStyle },
                     ...alternativeMoveButtons
+                ),
+                React.createElement(
+                    "div",
+                    { style: hflexStyle },
+                    ...gameButtons
                 )
             )
         );
