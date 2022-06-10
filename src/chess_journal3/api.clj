@@ -5,6 +5,7 @@
     [chess-journal3.db :as db]
     [chess-journal3.engine :as engine]
     [chess-journal3.fen :as fen]
+    [chess-journal3.pgn :as pgn]
     [clojure.string :as string]
     [clojure.string :as string]
     [compojure.core :refer :all]

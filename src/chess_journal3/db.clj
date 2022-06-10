@@ -1,6 +1,6 @@
 (ns chess-journal3.db
   (:require
-    [chess-journal.constants :refer [username]]
+    [chess-journal3.constants :refer [username]]
     [clj-time.core :as t]
     [clojure.java.jdbc :as jdbc]
     [clojure.string :as string]))

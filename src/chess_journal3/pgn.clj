@@ -1,7 +1,7 @@
 (ns chess-journal3.pgn
   (:require
-    [chess-journal.constants :refer [initial-fen]]
     [chess-journal3.chess :as chess]
+    [chess-journal3.constants :refer [initial-fen]]
     [chess-journal3.db :as db]
     [clojure.java.io :as io]
     [clojure.string :as string]))

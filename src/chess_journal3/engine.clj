@@ -115,7 +115,7 @@
 (def engine (atom nil))
 
 (defn reboot! []
-  (spit "" engine-log-file)
+  (spit engine-log-file "")
   (when @engine (.close @engine))
   (reset! engine (new-engine)))
 

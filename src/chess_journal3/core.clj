@@ -1,7 +1,7 @@
 (ns chess-journal3.core
   (:require
-    [chess-journal.constants :refer [initial-fen username]]
     [chess-journal3.chess :as chess]
+    [chess-journal3.constants :refer [initial-fen username]]
     [chess-journal3.db :as db]
     [chess-journal3.engine :as engine]
     [chess-journal3.fen :as fen]
