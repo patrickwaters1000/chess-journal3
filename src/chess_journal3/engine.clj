@@ -16,7 +16,7 @@
       Closeable)
     (java.lang Process ProcessBuilder)))
 
-(def engine-log-file "engine-log.txt")
+(def log-file "engine-log.txt")
 
 (defn parse-uci-move
   "Parses a move from the format used by Universal Chess Interface."
@@ -41,14 +41,14 @@
     (close! err)))
 
 (defn log [msg-type msg-str]
-  (spit engine-log-file
+  (spit log-file
         (format "%s %s\n%s\n\n"
                 (t/now)
                 (name msg-type)
                 msg-str)
         :append true))
 
-(defn new-engine []
+(defn make []
   (let [pb (ProcessBuilder. ["stockfish"])
         p (.start pb)
         p-out (BufferedReader.
@@ -93,42 +93,42 @@
           (recur)))))
 
 ;; TODO Throw exceptions of the engine writes to stderr.
-(defn get-move* [^Engine e fen think-seconds]
+(defn get-move* [^Engine e fen movetime]
   (let [in (:in e)
         out (:out e)
-        think-millis (int (* 1000 think-seconds))
+        move-millis (t/in-millis movetime)
         fen-msg (format "position fen %s\n" fen)
-        go-msg (format "go movetime %s\n" think-millis)
+        go-msg (format "go movetime %s\n" move-millis)
         move-regex #"^bestmove (.*) ponder .*$"]
     (>!! in fen-msg)
     (>!! in go-msg)
     (let [[_ move] (recieve e move-regex)]
       (parse-uci-move move))))
 
-(defn set-elo* [^Engine e elo]
+(defn- set-elo [^Engine e elo]
   (let [in (:in e)
-        msg-1 (format "setoption name UCI_LimitStrength value true\n" elo)
+        msg-1 "setoption name UCI_LimitStrength value true\n"
         msg-2 (format "setoption name UCI_Elo value %s\n" elo)]
     (>!! in msg-1)
     (>!! in msg-2)))
 
-(def engine (atom nil))
+(def lock (Object.))
 
-(defn reboot! []
-  (spit engine-log-file "")
-  (when @engine (.close @engine))
-  (reset! engine (new-engine)))
+;; TODO Check if clojure.core/memoize does the same thing.
+(def fen-x-elo->move (atom {}))
 
-(def default-think-seconds 5)
-
-(defn get-move [fen]
-  (get-move* @engine fen default-think-seconds))
-
-(defn set-elo [elo]
-  (set-elo* @engine elo))
+(defn get-move [^Engine e & {:keys [fen elo movetime]}]
+  (or (get @fen-x-elo->move [fen elo])
+      (locking lock
+        (when elo
+          (set-elo e elo))
+        (let [m (get-move* e fen movetime)
+              v (swap! fen-x-elo->move assoc [fen elo] m)]
+          (get v [fen elo])))))
 
 (comment
-  (reboot!)
-  (get-move @engine
-            "8/8/8/3k4/8/4K3/3P4/8 w - - 0 1"
-            2000))
+  (get-move* (make)
+             "8/8/8/3k4/8/4K3/3P4/8 w - - 0 1"
+             (t/seconds 2))
+  ;;
+  )

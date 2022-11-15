@@ -18,7 +18,7 @@ const event = (name, body) => {
     }).then(resp => {
         return resp.json();
     }).then(newState => {
-        console.log(`New state ${JSON.stringify(newState)}`);
+        // console.log(`New state ${JSON.stringify(newState)}`);
         if (newState.error) {
             window.alert(newState.error);
         }
@@ -30,13 +30,18 @@ const event = (name, body) => {
 };
 
 const Button = (props) => {
-    let { name, text, confirm } = props;
+    let { name, text, confirm, prompt } = props;
     let onClick;
     if (confirm) {
         onClick = () => {
             if (window.confirm("Are you sure?")) {
                 event(name);
             }
+        };
+    } else if (prompt) {
+        onClick = () => {
+            let input = window.prompt(prompt);
+            event(name, input);
         };
     } else {
         onClick = () => { event(name); };
@@ -110,11 +115,16 @@ class Page extends React.Component {
               isLocked,
               alternativeMoves,
               pgn,
-              games
+              games,
+              playerColor,
+              activeColor,
+              promotePiece
 	    } = this.state;
         let buttons;
         if (mode == "edit") {
             buttons = [
+                Button({ name: "setup-mode", text: "Setup position" }),
+                Button({ name: "endgames-mode", text: "Endgames" }),
                 Button({ name: "review-mode", text: "Review" }),
                 Button({ name: "battle-mode", text: "Battle" }),
                 Button({ name: "games-mode", text: "Games" }),
@@ -126,6 +136,8 @@ class Page extends React.Component {
             ];
         } else if (mode == "review") {
             buttons = [
+                Button({ name: "setup-mode", text: "Setup position" }),
+                Button({ name: "endgames-mode", text: "Endgames" }),
                 Button({ name: "edit-mode", text: "Edit" }),
                 Button({ name: "battle-mode", text: "Battle" }),
                 Button({ name: "games-mode", text: "Games" }),
@@ -136,6 +148,8 @@ class Page extends React.Component {
             ];
         } else if (mode == "games") {
             buttons = [
+                Button({ name: "setup-mode", text: "Setup position" }),
+                Button({ name: "endgames-mode", text: "Endgames" }),
                 Button({ name: "review-mode", text: "Review" }),
                 Button({ name: "edit-mode", text: "Edit" }),
                 Button({ name: "battle-mode", text: "Battle" }),
@@ -144,11 +158,42 @@ class Page extends React.Component {
             ];
         } else if (mode == "battle") {
             buttons = [
+                Button({ name: "setup-mode", text: "Setup position" }),
+                Button({ name: "endgames-mode", text: "Endgames" }),
                 Button({ name: "edit-mode", text: "Edit" }),
                 Button({ name: "review-mode", text: "Review" }),
                 Button({ name: "games-mode", text: "Games" }),
+                Button({ name: "set-elo", text: "Set Elo", prompt: "Elo:" }),
                 Button({ name: "reboot-engine", text: "Reboot engine" }),
+                Button({ name: "cycle-promote-piece", text: `Promotions to ${promotePiece}` }),
             ];
+        } else if (mode == "setup") {
+            buttons = [
+                Button({ name: "endgames-mode", text: "Endgames" }),
+                Button({ name: "edit-mode", text: "Edit" }),
+                Button({ name: "battle-mode", text: "Battle" }),
+                Button({ name: "review-mode", text: "Review" }),
+                Button({ name: "games-mode", text: "Games" }),
+                Button({ name: "clear", text: "Clear board" }),
+                Button({ name: "set-active-color", text: "Set color", prompt: "Who's turn (w or b)?"}),
+                Button({ name: "switch-color", text: `You are ${playerColor.toUpperCase()}` }),
+                Button({ name: "switch-active-color", text: `${activeColor.toUpperCase()} to play` }),
+                // Button({ name: "add-tag", text: "Add tag", prompt: "Tag:"})
+                // Button({ name: "save-position", text: "Save" }),
+            ];
+        //} else if (mode == "endgames") {
+        //    buttons = [
+        //        Button({ name: "setup-mode", text: "Setup position" }),
+        //        Button({ name: "endgames-mode", text: "Endgames" }),
+        //        Button({ name: "edit-mode", text: "Edit" }),
+        //        Button({ name: "battle-mode", text: "Battle" }),
+        //        Button({ name: "review-mode", text: "Review" }),
+        //        Button({ name: "games-mode", text: "Games" }),
+        //        Button({ name: "switch-color", text: "Switch color" }),
+        //        Button({ name: "set-elo", text: "Set Elo", prompt: "Elo:" }),
+        //        Button({ name: "reboot-engine", text: "Reboot engine" }),
+        //    ];
+        //}
         } else {
             buttons = [];
         }
@@ -199,23 +244,54 @@ class Page extends React.Component {
 }
 
 document.addEventListener("keydown", (e) => {
-    switch (e.code) {
-    case "ArrowLeft":
-        event("left");
-        break;
-    case "ArrowRight":
-        event("right");
-        break;
-    case "Enter":
-        event("enter");
-        break;
-    case "Delete":
-        event("undo");
-        break;
-    case "Backspace":
-        event("undo");
-        break;
+    let key;
+    if (e.shiftKey) {
+        switch (e.code) {
+        case "KeyK":
+            key = "K";
+            break;
+        case "KeyQ":
+            key = "Q";
+            break;
+        case "KeyR":
+            key = "R";
+            break;
+        case "KeyB":
+            key = "B";
+            break;
+        case "KeyN":
+            key = "N";
+            break;
+        case "KeyP":
+            key = "P";
+            break;
+        }
+    } else {
+        switch (e.code) {
+        case "KeyK":
+            key = "k";
+            break;
+        case "KeyQ":
+            key = "q";
+            break;
+        case "KeyR":
+            key = "r";
+            break;
+        case "KeyB":
+            key = "b";
+            break;
+        case "KeyN":
+            key = "n";
+            break;
+        case "KeyP":
+            key = "p";
+            break;
+        default:
+            key = e.code;
+        }
     }
+    console.log(`Key = ${key}`);
+    event("key", key);
 });
 
 window.addEventListener("DOMContentLoaded", () => {

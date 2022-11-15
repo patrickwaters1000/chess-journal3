@@ -25,3 +25,9 @@
     (is (= en-passant-square nil))
     (is (= halfmove-clock 0))
     (is (= fullmove-counter 1))))
+
+(deftest round-trip
+  (let [p "rnbq1rk1/pp2nppp/2pb4/3p4/2PP4/2NB1N2/PP3PPP/R1BQ1RK1 b - - 5 8"]
+    (is (= p (fen/unparse (fen/parse p)))))
+  (let [p fen/initial]
+    (is (= p (fen/unparse (fen/parse p))))))
