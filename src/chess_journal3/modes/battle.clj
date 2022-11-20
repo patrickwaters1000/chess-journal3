@@ -39,12 +39,18 @@
 (defn click-square [state square]
   (let [{:keys [selected-square]} state]
     (cond
+      (and (u/player-has-piece-on-square? state square)
+           (not= selected-square square))
+        (assoc state :selected-square square)
       (= selected-square square)
         (assoc state :selected-square nil)
       (and selected-square
            (u/players-move? state))
         (try-move state square)
-      (u/player-has-piece-on-square? state square)
-        (assoc state :selected-square square)
       :else
         state)))
+
+(defn switch-color [state]
+  (-> state
+      (update :color u/other-color)
+      set-opponent-must-move))

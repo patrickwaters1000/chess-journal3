@@ -39,13 +39,13 @@
     true u/reset-board
     (= "review" (:mode state)) review/set-opponent-must-move))
 
-;; TODO update for battle mode
 (defn switch-color [state]
-  (-> state
-      (update :color u/other-color)
-      lines/load-fen->moves
-      lines/load-lines
-      reset-board))
+  (let [f (case (:mode state)
+            ("edit"
+             "setup") lines/switch-color
+            "review" review/switch-color
+            "battle" battle/switch-color)]
+    (f state)))
 
 (defn click-square [state square]
   (let [f (case (:mode state)

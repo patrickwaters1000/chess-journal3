@@ -135,3 +135,10 @@
         (u/do-move m)
         (assoc :opponent-must-move false)
         cycle-to-first-matching-line)))
+
+(defn switch-color [state]
+  (-> state
+      (update :color u/other-color)
+      load-fen->moves
+      load-lines
+      u/reset-board))

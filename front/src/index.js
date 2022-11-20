@@ -165,6 +165,7 @@ class Page extends React.Component {
                 Button({ name: "games-mode", text: "Games" }),
                 Button({ name: "set-elo", text: "Set Elo", prompt: "Elo:" }),
                 Button({ name: "reboot-engine", text: "Reboot engine" }),
+                Button({ name: "switch-color", text: "Switch color" }),
                 Button({ name: "cycle-promote-piece", text: `Promotions to ${promotePiece}` }),
             ];
         } else if (mode == "setup") {

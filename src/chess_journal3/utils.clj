@@ -92,6 +92,8 @@
       (legal-move? state move)
         (do-move move))))
 
+;; TODO Rename. In the case that the starting position is not the initial
+;; position, this function name is confusing.
 (defn reset-board [state]
   (let [{:keys [locked-idx fens sans]} state]
     (assoc state

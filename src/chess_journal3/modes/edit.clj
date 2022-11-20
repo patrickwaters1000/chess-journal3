@@ -117,13 +117,14 @@
 (defn click-square [state square]
   (let [{:keys [selected-square]} state]
     (cond
+      ;; TODO Check that that player has the move
+      (and (not= selected-square square)
+           (or (u/player-has-piece-on-square? state square)
+               (u/opponent-has-piece-on-square? state square)))
+        (assoc state :selected-square square)
       (= selected-square square)
         (assoc state :selected-square nil)
       (and selected-square)
         (u/try-move state square)
-      ;; TODO Check that that player has the move
-      (or (u/player-has-piece-on-square? state square)
-          (u/opponent-has-piece-on-square? state square))
-        (assoc state :selected-square square)
       :else
         state)))
