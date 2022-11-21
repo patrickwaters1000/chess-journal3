@@ -8,6 +8,7 @@
     [chess-journal3.lines :as lines]
     [chess-journal3.modes.battle :as battle]
     [chess-journal3.modes.edit :as edit]
+    [chess-journal3.modes.endgames :as endgames]
     [chess-journal3.modes.games :as games]
     [chess-journal3.modes.review :as review]
     [chess-journal3.modes.setup :as setup]
@@ -55,7 +56,9 @@
    :opponent-must-move false
    :game->score nil
    :setup-selected-piece nil
-   :promote-piece "Q"})
+   :promote-piece "Q"
+   :endgames nil
+   :endgame-idx 0})
 
 (def state
   (atom initial-state))
@@ -77,6 +80,7 @@
 (defn view
   "Prepares a view of the app state, to be displayed by the client."
   [state]
+  (println (format "Fens = %s, idx = %s" (:fens state) (:idx state)))
   {:fen (u/get-fen state)
    :sans (:sans state)
    :idx (:idx state)
@@ -97,6 +101,8 @@
    ;; Only used in setup mode
    :activeColor (u/get-active-color state)
    :promotePiece (:promote-piece state)
+   :endgameMaterial (when (:endgames state)
+                      (endgames/get-material state))
    :error (:error state)})
 
 (defn route [msg f & args]
@@ -127,6 +133,7 @@
   (POST "/battle-mode" _ (route "Switch mode" battle/init))
   (POST "/games-mode" _ (route "Switch mode" games/init))
   (POST "/setup-mode" _ (route "Switch mode" setup/init))
+  (POST "/endgames-mode" _ (route "Switch mode" endgames/init))
   (POST "/select-game" {body :body}
     (let [game-tag (json/parse-string (slurp body))]
       (route "Select game" games/select-game game-tag)))
@@ -143,6 +150,9 @@
   (POST "/reboot-engine" _ (route "Reboot engine" core/reboot-engine!))
   (POST "/cycle-promote-piece" _ (route "Cycle promote piece" core/cycle-promote-piece))
   (POST "/switch-active-color" _ (route "Switch active color" setup/switch-active-color))
+  (POST "/save-endgame" _ (route "Save endgame" endgames/save))
+  (POST "/cycle-endgame-material" _ (route "Cycle endgame material" endgames/cycle-material))
+  (POST "/next-endgame" _ (route "Next endgame" endgames/next))
   (POST "/key" {body :body}
     (let [keycode (json/parse-string (slurp body))]
       (case keycode

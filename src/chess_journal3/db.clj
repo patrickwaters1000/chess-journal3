@@ -117,6 +117,19 @@ CONSTRAINT fk_big_tag_id
   FOREIGN KEY(big_tag_id)
     REFERENCES tags(id));"))
 
+(defn create-endgames-table! [db]
+  (jdbc/execute! db "
+CREATE TABLE endgames (
+  id INT GENERATED ALWAYS AS IDENTITY,
+  position_id INT NOT NULL,
+  objective VARCHAR NOT NULL,
+  comment VARCHAR,
+PRIMARY KEY(id),
+CONSTRAINT fk_position_id
+  FOREIGN KEY(position_id)
+    REFERENCES positions(id),
+UNIQUE(position_id));"))
+
 (defn insert-positions! [db fens]
   (let [template "
 INSERT INTO positions(fen)
@@ -310,6 +323,25 @@ FROM v
     (insert-tagged-moves! db (map #(assoc % :tag tag) moves))
     (insert-game!* db metadata)))
 
+(defn insert-endgame! [db {:keys [fen
+                                  objective
+                                  comment]}]
+  (insert-positions! db [fen])
+  (let [template "
+WITH t(fen, objective, comment) AS (
+  VALUES
+    %s
+)
+INSERT INTO endgames(position_id, objective, comment)
+SELECT p.id, t.objective, t.comment
+FROM t
+  LEFT JOIN positions p ON t.fen = p.fen
+ON CONFLICT DO NOTHING;"
+        values (format "('%s', '%s', '%s')"
+                       fen objective comment)
+        query (format template values)]
+    (jdbc/execute! db query)))
+
 (defn hyphenate [k]
   (keyword (string/replace (name k) "_" "-")))
 
@@ -402,6 +434,12 @@ FROM
 
 (defn get-all-moves [db tag fen])
 
+(defn get-endgames [db]
+  (jdbc/query db "
+SELECT p.fen, e.objective, e.comment
+FROM endgames e
+  LEFT JOIN positions p ON e.position_id = p.id;"))
+
 (defn update-move-tags! [db data]
   (let [template "
 WITH v(old_tag, new_tag, initial_fen, san) AS (
@@ -444,12 +482,14 @@ WHERE tagged_moves.id = input.tagged_move_id;
     (jdbc/execute! db "DROP TABLE IF EXISTS positions;")
     (jdbc/execute! db "DROP TABLE IF EXISTS games;")
     (jdbc/execute! db "DROP TABLE IF EXISTS tag_containments;")
+    (jdbc/execute! db "DROP TABLE IF EXISTS endgames;")
     (create-positions-table! db)
     (create-moves-table! db)
     (create-tags-table! db)
     (create-tagged-moves-table! db)
     (create-games-table! db)
     (create-tag-containments-table! db)
+    (create-endgames-table! db)
     (insert-tags! db ["white-reportoire"
                       "black-reportoire"
                       "deleted-white-reportoire"

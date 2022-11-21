@@ -118,7 +118,9 @@ class Page extends React.Component {
               games,
               playerColor,
               activeColor,
-              promotePiece
+              promotePiece,
+              //endgameObjective,
+              endgameMaterial,
 	    } = this.state;
         let buttons;
         if (mode == "edit") {
@@ -179,22 +181,15 @@ class Page extends React.Component {
                 Button({ name: "set-active-color", text: "Set color", prompt: "Who's turn (w or b)?"}),
                 Button({ name: "switch-color", text: `You are ${playerColor.toUpperCase()}` }),
                 Button({ name: "switch-active-color", text: `${activeColor.toUpperCase()} to play` }),
-                // Button({ name: "add-tag", text: "Add tag", prompt: "Tag:"})
-                // Button({ name: "save-position", text: "Save" }),
+                Button({ name: "save-endgame", text: "Save" }),
             ];
-        //} else if (mode == "endgames") {
-        //    buttons = [
-        //        Button({ name: "setup-mode", text: "Setup position" }),
-        //        Button({ name: "endgames-mode", text: "Endgames" }),
-        //        Button({ name: "edit-mode", text: "Edit" }),
-        //        Button({ name: "battle-mode", text: "Battle" }),
-        //        Button({ name: "review-mode", text: "Review" }),
-        //        Button({ name: "games-mode", text: "Games" }),
-        //        Button({ name: "switch-color", text: "Switch color" }),
-        //        Button({ name: "set-elo", text: "Set Elo", prompt: "Elo:" }),
-        //        Button({ name: "reboot-engine", text: "Reboot engine" }),
-        //    ];
-        //}
+        } else if (mode == "endgames") {
+            buttons = [
+                //Button({ name: "cycle-objective", text: endgameObjective }),
+                Button({ name: "cycle-endgame-material", text: endgameMaterial }),
+                Button({ name: "next-endgame", text: "Next" }),
+                Button({ name: "battle-mode", text: "Battle" }),
+            ];
         } else {
             buttons = [];
         }

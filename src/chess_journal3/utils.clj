@@ -11,8 +11,11 @@
   (case color "w" "b" "b" "w"))
 
 (defn get-fen [state]
-  (let [{:keys [fens idx]} state]
-    (nth fens idx)))
+  (try
+    (let [{:keys [fens idx]} state]
+      (nth fens idx))
+    (catch Exception e
+      (throw (Exception. (format "Failed with fens = %s, idx = %s" (:fens state) (:idx state)))))))
 
 (defn get-active-color [state]
   (-> state get-fen fen/parse :active-color))
