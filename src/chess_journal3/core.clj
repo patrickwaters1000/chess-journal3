@@ -50,7 +50,8 @@
 (defn click-square [state square]
   (let [f (case (:mode state)
             "review" review/click-square
-            "battle" battle/click-square
+            ("battle"
+             "endgames") battle/click-square
             "edit" edit/click-square
             "setup" setup/click-square
             identity)]
@@ -66,7 +67,8 @@
 (defn opponent-move [state]
   (case (:mode state)
     "review" (review/opponent-move state)
-    "battle" (battle/opponent-move state)))
+    ("battle"
+     "endgames") (battle/opponent-move state)))
 
 ;; NOTE We set the Elo before requesting each move.
 (defn set-elo [state elo]

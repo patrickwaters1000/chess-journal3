@@ -124,6 +124,7 @@ CREATE TABLE endgames (
   position_id INT NOT NULL,
   objective VARCHAR NOT NULL,
   comment VARCHAR,
+  deleted BOOLEAN,
 PRIMARY KEY(id),
 CONSTRAINT fk_position_id
   FOREIGN KEY(position_id)
@@ -342,6 +343,15 @@ ON CONFLICT DO NOTHING;"
         query (format template values)]
     (jdbc/execute! db query)))
 
+(defn delete-endgame! [db fen]
+  (let [template "
+DELETE FROM endgames e
+       USING positions p
+WHERE e.position_id = p.id
+      AND p.fen = '%s';"
+        sql (format template fen)]
+    (jdbc/execute! db sql)))
+
 (defn hyphenate [k]
   (keyword (string/replace (name k) "_" "-")))
 
@@ -496,6 +506,8 @@ WHERE tagged_moves.id = input.tagged_move_id;
                       "deleted-black-reportoire"])
     (insert-tags! db ["white-games"
                       "black-games"]))
+  (jdbc/execute! db "ALTER TABLE endgames ADD COLUMN deleted boolean")
+  (jdbc/execute! db "ALTER TABLE endgames DROP COLUMN deleted")
 
   (require '[chess-journal3.pgn :as pgn])
   (def games (vec (pgn/read-file "/Users/pwaters/Downloads/chess_com_games_2022-05-29.pgn")))

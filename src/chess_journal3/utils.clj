@@ -4,6 +4,11 @@
     [chess-journal3.fen :as fen]
     [clojure.string :as string]))
 
+(defn get-unique [xs]
+  (when-not (= 1 (count xs))
+    (throw (Exception. "Failed")))
+  (first xs))
+
 (defn cycle [xs]
   (conj (vec (rest xs)) (first xs)))
 

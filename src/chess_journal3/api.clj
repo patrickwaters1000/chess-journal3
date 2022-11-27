@@ -10,6 +10,7 @@
     [chess-journal3.modes.edit :as edit]
     [chess-journal3.modes.endgames :as endgames]
     [chess-journal3.modes.games :as games]
+    [chess-journal3.modes.menu :as menu]
     [chess-journal3.modes.review :as review]
     [chess-journal3.modes.setup :as setup]
     [chess-journal3.pgn :as pgn]
@@ -37,6 +38,9 @@
 ;; 21. Move number in alternative moves buttons
 ;; 22. Having alternative moves work differently in edit mode is too confusing
 ;; 23. Instead of `opponentMustMove`, a `pendingMoveId`
+;; 25. Add opponent lines to endgames mode
+;; 28. Init functions for various modes are not complete. E.g., reset board to
+;;     initial fen when starting review mode.
 
 (def initial-state
   {:db db/db
@@ -47,7 +51,7 @@
    :fen->moves {}
    ;; TODO Rename, since used not just in review mode
    :lines []
-   :mode "review"
+   :mode "menu"
    :locked-idx 0
    :fens [fen/initial]
    :sans []
@@ -58,12 +62,11 @@
    :setup-selected-piece nil
    :promote-piece "Q"
    :endgames nil
+   :endgame-class []
    :endgame-idx 0})
 
 (def state
   (atom initial-state))
-
-;; Move to PGN namespace
 
 (defn log-state []
   (println "State:")
@@ -80,7 +83,6 @@
 (defn view
   "Prepares a view of the app state, to be displayed by the client."
   [state]
-  (println (format "Fens = %s, idx = %s" (:fens state) (:idx state)))
   {:fen (u/get-fen state)
    :sans (:sans state)
    :idx (:idx state)
@@ -101,8 +103,8 @@
    ;; Only used in setup mode
    :activeColor (u/get-active-color state)
    :promotePiece (:promote-piece state)
-   :endgameMaterial (when (:endgames state)
-                      (endgames/get-material state))
+   :endgameClassButtonConfigs (when (= "endgames" (:mode state))
+                                (endgames/get-button-configs state))
    :error (:error state)})
 
 (defn route [msg f & args]
@@ -121,19 +123,24 @@
 (defroutes app
   (GET "/" [] (slurp "front/dist/index.html"))
   (GET "/main.js" [] (slurp "front/dist/main.js"))
-  (POST "/start" _ (route "Start" review/init))
+  (POST "/start" _ (route "Start" menu/init))
   (POST "/click-square" {body :body}
     (let [square (json/parse-string (slurp body))]
       (route (format "Click square %s" square) core/click-square square)))
   (POST "/alternative-move" {body :body}
     (let [san (json/parse-string (slurp body))]
       (route (format "Alternative move %s" san) lines/alternative-move san)))
-  (POST "/edit-mode" _ (route "Switch mode" edit/init))
-  (POST "/review-mode" _ (route "Switch mode" review/init))
-  (POST "/battle-mode" _ (route "Switch mode" battle/init))
-  (POST "/games-mode" _ (route "Switch mode" games/init))
-  (POST "/setup-mode" _ (route "Switch mode" setup/init))
-  (POST "/endgames-mode" _ (route "Switch mode" endgames/init))
+  (POST "/set-mode" {body :body}
+    (let [mode (json/parse-string (slurp body))
+          f (case mode
+              "menu" menu/init
+              "edit" edit/init
+              "review" review/init
+              "battle" battle/init
+              "games" games/init
+              "setup" setup/init
+              "endgames" endgames/init)]
+      (route (format "%s mode" mode) f)))
   (POST "/select-game" {body :body}
     (let [game-tag (json/parse-string (slurp body))]
       (route "Select game" games/select-game game-tag)))
@@ -151,8 +158,13 @@
   (POST "/cycle-promote-piece" _ (route "Cycle promote piece" core/cycle-promote-piece))
   (POST "/switch-active-color" _ (route "Switch active color" setup/switch-active-color))
   (POST "/save-endgame" _ (route "Save endgame" endgames/save))
-  (POST "/cycle-endgame-material" _ (route "Cycle endgame material" endgames/cycle-material))
+  (POST "/delete-endgame" _ (route "Delete endgame" endgames/delete))
+  (POST "/cycle-endgame-class" {body :body}
+    (let [level (json/parse-string (slurp body))]
+      (route "Cycle endgame class" endgames/cycle-class level)))
+  (POST "/refine-endgame-class" _ (route "Cycle endgame class" endgames/refine-class))
   (POST "/next-endgame" _ (route "Next endgame" endgames/next))
+  (POST "/previous-endgame" _ (route "Previous endgame" endgames/previous))
   (POST "/key" {body :body}
     (let [keycode (json/parse-string (slurp body))]
       (case keycode

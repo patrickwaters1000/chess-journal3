@@ -2,21 +2,9 @@
   (:require
     [chess-journal3.db :as db]
     [chess-journal3.fen :as fen]
+    [chess-journal3.modes.battle :as battle]
     [chess-journal3.utils :as u]
     [clojure.string :as string]))
-
-(defn- get-current-endgame [state]
-  (let [{:keys [endgames endgame-idx]} state]
-    (nth endgames endgame-idx)))
-
-(defn- reset-board [state]
-  (let [endgame (get-current-endgame state)
-        fen (:fen endgame)]
-    (assoc state
-      :fens [fen]
-      :sans []
-      :idx 0
-      :selected-square nil)))
 
 (defn- set-color [state]
   (assoc state :color (u/get-active-color state)))
@@ -24,7 +12,7 @@
 (def white-pieces #{"K" "Q" "R" "B" "N" "P"})
 (def piece-order {"K" 0 "Q" 1 "R" 2 "B" 3 "N" 4 "P" 5})
 
-(defn- get-material-from-fen [fen]
+(defn get-material [fen]
   (let [position (fen/parse fen)
         square->piece (:square->piece position)
         pieces (vals square->piece)
@@ -39,35 +27,119 @@
                               (apply str))]
     (str white-pieces-str "v" black-pieces-str)))
 
-(defn- get-endgames [db]
-  (->> (db/get-endgames db)
-       (map #(assoc % :material (get-material-from-fen (:fen %))))))
+(defn get-file-of-unique-pawn [fen]
+  (let [square (->> fen
+                    fen/parse
+                    :square->piece
+                    (filter #(contains? #{"p" "P"} (val %)))
+                    u/get-unique
+                    key)]
+    (string/lower-case (subs square 0 1))))
+
+(def taxonomy
+  [get-material {"KRPvKR" [get-file-of-unique-pawn {}]}])
+
+(defn- classify [fen]
+  (loop [result []
+         subtaxonomy taxonomy]
+    (if (nil? subtaxonomy)
+      result
+      (let [[classifier subtree] subtaxonomy
+            taxa (classifier fen)
+            new-result (conj result [classifier taxa])
+            new-subtaxonomy (->> subtree
+                                 (filter #(= taxa (key %)))
+                                 (map val)
+                                 first)]
+        (recur new-result
+               new-subtaxonomy)))))
+
+(defn- matches-class? [endgame-class fen]
+  ;;(println (format "endgame-class = %s, fen = %s" (str endgame-class) (str fen)))
+  (->> endgame-class
+       (map (fn [[classifier taxa]]
+              (= taxa (classifier fen))))
+       (every? true?)))
+
+(defn- index-of [x xs]
+  (->> xs
+       (map-indexed vector)
+       (filter #(= x (second %)))
+       ffirst))
+
+(defn- cycle-subclass [endgame-class delta endgames]
+  (if (empty? endgame-class)
+    endgame-class
+    (let [branch (vec (drop-last endgame-class))
+          [f v1] (last endgame-class)
+          vs (->> endgames
+                  (map :fen)
+                  (filter #(matches-class? branch %))
+                  (map f)
+                  (into #{})
+                  sort)
+          i1 (index-of v1 vs)
+          i2 (mod (+ i1 delta) (count vs))
+          v2 (nth vs i2)]
+      (conj branch [f v2]))))
+
+(defn- get-endgames-in-current-class [state]
+  (let [{:keys [endgame-class
+                endgames]} state]
+    (filter #(matches-class? endgame-class (:fen %))
+            endgames)))
+
+(defn count-endgames-in-current-class [state]
+  (count (get-endgames-in-current-class state)))
+
+(defn- get-current-endgame [state]
+  (let [{:keys [endgame-idx]} state
+        candidates (get-endgames-in-current-class state)]
+    (nth candidates endgame-idx)))
+
+(defn- coarsen-endgame-class-until-match [endgame-class fen]
+  (loop [endgame-class endgame-class]
+    (if (matches-class? endgame-class fen)
+      endgame-class
+      (recur (drop-last endgame-class)))))
+
+(defn- current-fen-in-endgames? [state]
+  (let [fens (->> (:endgames state)
+                  (map :fen)
+                  (into #{}))
+        fen (u/get-fen state)]
+    (contains? fens fen)))
+
+(defn- cycle-to-matching-fen [state]
+  (let [fen (u/get-fen state)
+        fens (->> (get-endgames-in-current-class state)
+                  (map :fen))
+        idx (index-of fen fens)]
+    (assoc state :endgame-idx idx)))
+
+(defn- cycle-to-matching-fen-if-possible [state]
+  (if-not (current-fen-in-endgames? state)
+    state
+    (-> state
+        coarsen-endgame-class-until-match
+        cycle-to-matching-fen)))
+
+(defn- reset-board [state]
+  (let [endgame (get-current-endgame state)
+        fen (:fen endgame)]
+    (assoc state
+      :fens [fen]
+      :sans []
+      :idx 0
+      :selected-square nil)))
 
 (defn init [state]
   (let [{:keys [db]} state]
     (-> state
         (assoc :mode "endgames"
-               :endgames (get-endgames db))
+               :endgames (db/get-endgames db))
+        cycle-to-matching-fen-if-possible
         reset-board)))
-
-(defn get-material [state]
-  (:material (get-current-endgame state)))
-
-(defn next-with-material [state material]
-  (let [endgames (:endgames state)
-        num-endgames (count endgames)
-        next-idx (fn [idx] (mod (inc idx) num-endgames))]
-    (loop [idx (next-idx (:endgame-idx state))]
-      (if (= material (:material (nth endgames idx)))
-        (-> state
-            (assoc :endgame-idx idx)
-            reset-board
-            set-color)
-        (recur (next-idx idx))))))
-
-(defn next [state]
-  (let [material (get-material state)]
-    (next-with-material state material)))
 
 (defn save [state]
   (let [{:keys [db]} state
@@ -77,18 +149,62 @@
                             :objective ""})
     state))
 
-(defn cycle-material [state]
-  (let [material (get-material state)
-        all-materials (->> (:endgames state)
-                           (map :material)
-                           (into #{})
-                           sort)
-        material-idx (->> all-materials
-                          (map-indexed vector)
-                          (filter #(= material (second %)))
-                          (map first)
-                          first)
-        next-material-idx (mod (inc material-idx)
-                               (count all-materials))
-        next-material (nth all-materials next-material-idx)]
-    (next-with-material state next-material)))
+(defn delete [state]
+  (let [fen (u/get-fen state)]
+    (db/delete-endgame! fen)
+    (init state)))
+
+(defn cycle-class [state level]
+  (let [{:keys [endgames
+                endgame-class]} state
+        new-endgame-class (-> endgame-class
+                              (subvec 0 (inc level))
+                              (cycle-subclass 1 endgames))]
+    (-> state
+        (assoc :endgame-class new-endgame-class
+               :endgame-idx 0)
+        reset-board)))
+
+(defn refine-class [state]
+  (let [fen (:fen (get-current-endgame state))
+        level (-> state :endgame-class count inc)
+        endgame-class (-> fen classify (subvec 0 level))
+        endgame-idx (->> (:endgames state)
+                         (map :fen)
+                         (filter #(matches-class? endgame-class %))
+                         (index-of fen))]
+    (assoc state
+      :endgame-class endgame-class
+      :endgame-idx endgame-idx)))
+
+(defn- cycle-position [state delta]
+  (let [n (count-endgames-in-current-class state)]
+    (-> state
+        (update :endgame-idx #(mod (+ % delta) n))
+        reset-board)))
+
+(defn next [state] (cycle-position state 1))
+(defn previous [state] (cycle-position state -1))
+
+(defn get-button-text-formatter [classifier]
+  (let [c (class classifier)]
+    (cond
+      (= c chess_journal3.modes.endgames$get_material) "%s"
+      (= c chess_journal3.modes.endgames$get_file_of_unique_pawn) "%s-pawn")))
+
+(defn get-button-configs [state]
+  (let [{:keys [endgame-class
+                endgame-idx]} state
+        cycle-class-buttons (map-indexed
+                              (fn [i [classifier taxa]]
+                                (let [template (get-button-text-formatter classifier)
+                                      text (format template taxa)]
+                                  {:text text
+                                   :route "cycle-endgame-class"
+                                   :level i}))
+                              endgame-class)
+        num-endgames (count-endgames-in-current-class state)
+        refine-class-text (format "%d / %d" (inc endgame-idx) num-endgames)
+        refine-class-button {:text refine-class-text
+                             :route "refine-endgame-class"}]
+    (conj (vec cycle-class-buttons) refine-class-button)))

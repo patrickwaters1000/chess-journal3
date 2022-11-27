@@ -53,7 +53,6 @@
            (u/players-move? state)
            (move-to-square-is-correct? state square))
         (u/try-move state square)
-
       :else
         state)))
 

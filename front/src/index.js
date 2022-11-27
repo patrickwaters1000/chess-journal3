@@ -30,12 +30,12 @@ const event = (name, body) => {
 };
 
 const Button = (props) => {
-    let { name, text, confirm, prompt } = props;
+    let { name, text, confirm, prompt, body } = props;
     let onClick;
     if (confirm) {
         onClick = () => {
             if (window.confirm("Are you sure?")) {
-                event(name);
+                event(name, body);
             }
         };
     } else if (prompt) {
@@ -44,7 +44,7 @@ const Button = (props) => {
             event(name, input);
         };
     } else {
-        onClick = () => { event(name); };
+        onClick = () => { event(name, body); };
     }
     return React.createElement(
         "button",
@@ -78,6 +78,23 @@ const AlternativeMoveButton = (data) => {
          : `${san} (${lines}, ${(100 * score).toFixed(1)}%)`)
     );
 };
+
+const EndgameClassButton = (data) => {
+    let { route,
+          text,
+          level } = data;
+    return React.createElement(
+        "button",
+        {
+            onClick : () => { event(route, level); },
+            style: {
+	        maxWidth: "100px",
+	        width: "100px"
+            }
+        },
+        text
+    );
+}
 
 const GameButton = (data) => {
     let { opponent,
@@ -119,17 +136,20 @@ class Page extends React.Component {
               playerColor,
               activeColor,
               promotePiece,
-              //endgameObjective,
-              endgameMaterial,
-	    } = this.state;
+              endgameClassButtonConfigs,
+            } = this.state;
         let buttons;
-        if (mode == "edit") {
+        if (mode == "menu") {
             buttons = [
-                Button({ name: "setup-mode", text: "Setup position" }),
-                Button({ name: "endgames-mode", text: "Endgames" }),
-                Button({ name: "review-mode", text: "Review" }),
-                Button({ name: "battle-mode", text: "Battle" }),
-                Button({ name: "games-mode", text: "Games" }),
+                Button({ name: "set-mode", body: "setup", text: "Setup position" }),
+                Button({ name: "set-mode", body: "endgames", text: "Endgames" }),
+                Button({ name: "set-mode", body: "review", text: "Review" }),
+                Button({ name: "set-mode", body: "battle", text: "Battle" }),
+                Button({ name: "set-mode", body: "games", text: "Games" }),
+            ];
+        } else if (mode == "edit") {
+            buttons = [
+                Button({ name: "set-mode", body: "menu", text: "Exit" }),
                 Button({ name: "switch-color", text: "Switch color" }),
                 Button({ name: "switch-lock", text: (isLocked ? "Unlock" : "Lock") }),
                 Button({ name: "reset", text: "Reset" }),
@@ -138,11 +158,7 @@ class Page extends React.Component {
             ];
         } else if (mode == "review") {
             buttons = [
-                Button({ name: "setup-mode", text: "Setup position" }),
-                Button({ name: "endgames-mode", text: "Endgames" }),
-                Button({ name: "edit-mode", text: "Edit" }),
-                Button({ name: "battle-mode", text: "Battle" }),
-                Button({ name: "games-mode", text: "Games" }),
+                Button({ name: "set-mode", body: "menu", text: "Exit" }),
                 Button({ name: "switch-color", text: "Switch color" }),
                 Button({ name: "switch-lock", text: (isLocked ? "Unlock" : "Lock") }),
               	Button({ name: "reset", text: "Reset" }),
@@ -150,21 +166,13 @@ class Page extends React.Component {
             ];
         } else if (mode == "games") {
             buttons = [
-                Button({ name: "setup-mode", text: "Setup position" }),
-                Button({ name: "endgames-mode", text: "Endgames" }),
-                Button({ name: "review-mode", text: "Review" }),
-                Button({ name: "edit-mode", text: "Edit" }),
-                Button({ name: "battle-mode", text: "Battle" }),
+                Button({ name: "set-mode", body: "menu", text: "Exit" }),
                 Button({ name: "switch-color", text: "Switch color" }),
                 Button({ name: "reset", text: "Reset" }),
             ];
         } else if (mode == "battle") {
             buttons = [
-                Button({ name: "setup-mode", text: "Setup position" }),
-                Button({ name: "endgames-mode", text: "Endgames" }),
-                Button({ name: "edit-mode", text: "Edit" }),
-                Button({ name: "review-mode", text: "Review" }),
-                Button({ name: "games-mode", text: "Games" }),
+                Button({ name: "set-mode", body: "menu", text: "Exit" }),
                 Button({ name: "set-elo", text: "Set Elo", prompt: "Elo:" }),
                 Button({ name: "reboot-engine", text: "Reboot engine" }),
                 Button({ name: "switch-color", text: "Switch color" }),
@@ -172,11 +180,8 @@ class Page extends React.Component {
             ];
         } else if (mode == "setup") {
             buttons = [
-                Button({ name: "endgames-mode", text: "Endgames" }),
-                Button({ name: "edit-mode", text: "Edit" }),
-                Button({ name: "battle-mode", text: "Battle" }),
-                Button({ name: "review-mode", text: "Review" }),
-                Button({ name: "games-mode", text: "Games" }),
+                Button({ name: "set-mode", body: "menu", text: "Exit" }),
+                Button({ name: "set-mode", body: "endgames", text: "Endgames" }),
                 Button({ name: "clear", text: "Clear board" }),
                 Button({ name: "set-active-color", text: "Set color", prompt: "Who's turn (w or b)?"}),
                 Button({ name: "switch-color", text: `You are ${playerColor.toUpperCase()}` }),
@@ -185,10 +190,18 @@ class Page extends React.Component {
             ];
         } else if (mode == "endgames") {
             buttons = [
-                //Button({ name: "cycle-objective", text: endgameObjective }),
-                Button({ name: "cycle-endgame-material", text: endgameMaterial }),
-                Button({ name: "next-endgame", text: "Next" }),
-                Button({ name: "battle-mode", text: "Battle" }),
+                Button({ name: "set-mode", body: "menu", text: "Exit" }),
+                Button({ name: "set-mode", body: "setup", text: "Setup position" }),
+                React.createElement(
+                    "div",
+                    { style: hflexStyle },
+                    ...endgameClassButtonConfigs.map(EndgameClassButton)
+                ),
+                Button({ name: "next-endgame", text: "Next position" }),
+                Button({ name: "previous-endgame", text: "Previous position" }),
+                Button({ name: "switch-color", text: `You are ${playerColor.toUpperCase()}` }),
+                Button({ name: "cycle-promote-piece", text: `Promotions to ${promotePiece}` }),
+                Button({ name: "delete-endgame", text: "Delete", confirm: true }),
             ];
         } else {
             buttons = [];
