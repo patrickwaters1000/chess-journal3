@@ -137,6 +137,7 @@ class Page extends React.Component {
               activeColor,
               promotePiece,
               endgameClassButtonConfigs,
+              liveGameName,
             } = this.state;
         let buttons;
         if (mode == "menu") {
@@ -146,6 +147,7 @@ class Page extends React.Component {
                 Button({ name: "set-mode", body: "review", text: "Review" }),
                 Button({ name: "set-mode", body: "battle", text: "Battle" }),
                 Button({ name: "set-mode", body: "games", text: "Games" }),
+                Button({ name: "set-mode", body: "live-games", text: "Saved games" }),
             ];
         } else if (mode == "edit") {
             buttons = [
@@ -177,6 +179,7 @@ class Page extends React.Component {
                 Button({ name: "reboot-engine", text: "Reboot engine" }),
                 Button({ name: "switch-color", text: "Switch color" }),
                 Button({ name: "cycle-promote-piece", text: `Promotions to ${promotePiece}` }),
+                Button({ name: "new-live-game", text: "Save", prompt: "Game name:" }),
             ];
         } else if (mode == "setup") {
             buttons = [
@@ -187,6 +190,7 @@ class Page extends React.Component {
                 Button({ name: "switch-color", text: `You are ${playerColor.toUpperCase()}` }),
                 Button({ name: "switch-active-color", text: `${activeColor.toUpperCase()} to play` }),
                 Button({ name: "save-endgame", text: "Save" }),
+                Button({ name: "set-mode", body: "battle", text: "Battle" }),
             ];
         } else if (mode == "endgames") {
             buttons = [
@@ -202,6 +206,17 @@ class Page extends React.Component {
                 Button({ name: "switch-color", text: `You are ${playerColor.toUpperCase()}` }),
                 Button({ name: "cycle-promote-piece", text: `Promotions to ${promotePiece}` }),
                 Button({ name: "delete-endgame", text: "Delete", confirm: true }),
+                Button({ name: "force-move", text: "Force move", prompt: "Move:" }),
+            ];
+        } else if (mode == "live-games") {
+            buttons = [
+                Button({ name: "set-mode", body: "menu", text: "Exit" }),
+                Button({ name: "set-elo", text: "Set Elo", prompt: "Elo:" }),
+                Button({ name: "reboot-engine", text: "Reboot engine" }),
+                Button({ name: "cycle-promote-piece", text: `Promotions to ${promotePiece}` }),
+                Button({ name: "cycle-live-game", text: liveGameName }),
+                Button({ name: "end-live-game", text: "Complete", prompt: "Result" }),
+                Button({ name: "save-live-game", text: "Save" }),
             ];
         } else {
             buttons = [];

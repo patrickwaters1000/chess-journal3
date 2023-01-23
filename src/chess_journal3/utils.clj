@@ -77,7 +77,7 @@
              :to to-square}
       promotion (assoc :promote promote-piece))))
 
-(defn- legal-move? [state move]
+(defn legal-move? [state move]
   (chess/legal-move? (get-fen state) move))
 
 (defn do-move [state move]

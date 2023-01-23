@@ -4,7 +4,7 @@
     [chess-journal3.engine :as engine]
     [chess-journal3.utils :as u]))
 
-(defn- set-opponent-must-move [state]
+(defn set-opponent-must-move [state]
   (assoc state :opponent-must-move (u/opponents-move? state)))
 
 (defn init [state]
@@ -30,7 +30,7 @@
         (update :idx inc)
         (assoc :opponent-must-move false))))
 
-(defn- try-move [state square]
+(defn try-move [state square]
   (let [state* (u/try-move state square)]
     (if (= state state*)
       state

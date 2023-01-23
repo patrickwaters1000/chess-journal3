@@ -85,17 +85,70 @@
         want #{lucena philidor}]
     (is (= want got))))
 
-(deftest cycling-material
-  (let [state {:endgames endgames
-               :endgame-idx 0}]
-    (is (= "KRPvKR" (endgames/get-material state)))
-    (is (= "KPvK" (-> state
-                      endgames/cycle-material
-                      endgames/get-material)))
-    (is (= "KRPvKR" (-> state
-                        endgames/cycle-material
-                        endgames/cycle-material
-                        endgames/get-material)))))
+(deftest coarsening-endgame-class
+  (let [endgame-class [[#'endgames/get-material "KRPvKR"]
+                       [#'endgames/get-file-of-unique-pawn "E"]]]
+    (is (= [] (#'endgames/coarsen-endgame-class-until-match
+               endgame-class basic-pawn-draw)))
+    (is (= endgame-class (#'endgames/coarsen-endgame-class-until-match
+                          endgame-class lucena)))))
+
+(deftest checking-current-fen-in-endgames
+  (let [state {:fens [lucena]
+               :idx 0
+               :endgames endgames}]
+    (is (#'endgames/current-fen-in-endgames? state)))
+  (let [state {:fens [fen/initial]
+               :idx 0
+               :endgames endgames}]
+    (is (not (#'endgames/current-fen-in-endgames? state)))))
+
+(deftest getting-current-endgame
+  (is (= lucena (:fen (#'endgames/get-current-endgame
+                       {:endgames endgames
+                        :endgame-class [[#'endgames/get-material "KRPvKR"]
+                                        [#'endgames/get-file-of-unique-pawn "E"]]
+                        :endgame-idx 0}))))
+  (is (= philidor (:fen (#'endgames/get-current-endgame
+                         {:endgames endgames
+                          :endgame-class [[#'endgames/get-material "KRPvKR"]
+                                          [#'endgames/get-file-of-unique-pawn "E"]]
+                          :endgame-idx 1})))))
+
+(require '[chess-journal3.utils :as u])
+(let [state-1 {:fens [philidor]
+               :idx 0
+               :endgames endgames
+               :endgame-class [[#'endgames/get-material "KRPvKR"]
+                               [#'endgames/get-file-of-unique-pawn "E"]]
+               :endgame-idx 0}
+      fen (u/get-fen state-1)
+      fens (->> (#'endgames/get-endgame-fens-in-current-class state-1))
+      state-2 (#'endgames/cycle-to-matching-fen state-1)]
+  ;;state-2
+  ;;(#'endgames/get-current-endgame state-2)
+  (endgames/index-of philidor fens)
+  state-2)
+
+(deftest cycling-to-match-fen
+  (let [state (#'endgames/cycle-to-matching-fen
+               {:fens [lucena]
+                :idx 0
+                :endgames endgames
+                :endgame-class [[#'endgames/get-material "KRPvKR"]
+                                [#'endgames/get-file-of-unique-pawn "E"]]
+                :endgame-idx 0})
+        endgame-fen (#'endgames/get-current-endgame-fen state)]
+    (is (= lucena endgame-fen)))
+  (let [state (#'endgames/cycle-to-matching-fen
+               {:fens [philidor]
+                :idx 0
+                :endgames endgames
+                :endgame-class [[#'endgames/get-material "KRPvKR"]
+                                [#'endgames/get-file-of-unique-pawn "E"]]
+                :endgame-idx 0})
+        endgame-fen (#'endgames/get-current-endgame-fen state)]
+    (is (= philidor endgame-fen))))
 
 (comment
   (db/insert-endgame! db/db {:fen lucena

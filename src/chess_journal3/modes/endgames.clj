@@ -1,5 +1,6 @@
 (ns chess-journal3.modes.endgames
   (:require
+    [chess-journal3.chess :as chess]
     [chess-journal3.db :as db]
     [chess-journal3.fen :as fen]
     [chess-journal3.modes.battle :as battle]
@@ -33,11 +34,34 @@
                     :square->piece
                     (filter #(contains? #{"p" "P"} (val %)))
                     u/get-unique
-                    key)]
-    (string/lower-case (subs square 0 1))))
+                    key)
+        reflect-files #(case % "e" "d" "f" "c" "g" "b" "h" "a" %)]
+    (-> square
+        (subs 0 1)
+        string/lower-case
+        reflect-files)))
+
+(defn get-rank-of-unique-pawn [fen]
+  (try
+    (let [square (->> fen
+                      fen/parse
+                      :square->piece
+                      (filter #(contains? #{"p" "P"} (val %)))
+                      u/get-unique
+                      key)]
+      (Integer/parseInt (subs square 1 2)))
+    (catch Exception e
+      (throw (Exception.
+               (format "Can't get rank of unique pawn in %s" fen))))))
 
 (def taxonomy
-  [get-material {"KRPvKR" [get-file-of-unique-pawn {}]}])
+  [get-material {"KRPvKR" [get-rank-of-unique-pawn
+                           {2 [get-file-of-unique-pawn {}]
+                            3 [get-file-of-unique-pawn {}]
+                            4 [get-file-of-unique-pawn {}]
+                            5 [get-file-of-unique-pawn {}]
+                            6 [get-file-of-unique-pawn {}]
+                            7 [get-file-of-unique-pawn {}]}]}])
 
 (defn- classify [fen]
   (loop [result []
@@ -55,11 +79,12 @@
                new-subtaxonomy)))))
 
 (defn- matches-class? [endgame-class fen]
-  ;;(println (format "endgame-class = %s, fen = %s" (str endgame-class) (str fen)))
-  (->> endgame-class
-       (map (fn [[classifier taxa]]
-              (= taxa (classifier fen))))
-       (every? true?)))
+  (reduce (fn [m [classifier taxa]]
+            (if (= taxa (classifier fen))
+              true
+              (reduced false)))
+          true
+          endgame-class))
 
 (defn- index-of [x xs]
   (->> xs
@@ -120,9 +145,12 @@
 (defn- cycle-to-matching-fen-if-possible [state]
   (if-not (current-fen-in-endgames? state)
     state
-    (-> state
-        coarsen-endgame-class-until-match
-        cycle-to-matching-fen)))
+    (let [fen (u/get-fen state)
+          endgame-class (-> (:endgame-class state)
+                            (coarsen-endgame-class-until-match fen))]
+      (-> state
+          (assoc :endgame-class endgame-class)
+          cycle-to-matching-fen))))
 
 (defn- reset-board [state]
   (let [endgame (get-current-endgame state)
@@ -151,7 +179,7 @@
 
 (defn delete [state]
   (let [fen (u/get-fen state)]
-    (db/delete-endgame! fen)
+    (db/delete-endgame! (:db state) fen)
     (init state)))
 
 (defn cycle-class [state level]
@@ -190,6 +218,7 @@
   (let [c (class classifier)]
     (cond
       (= c chess_journal3.modes.endgames$get_material) "%s"
+      (= c chess_journal3.modes.endgames$get_rank_of_unique_pawn) "%sth rank"
       (= c chess_journal3.modes.endgames$get_file_of_unique_pawn) "%s-pawn")))
 
 (defn get-button-configs [state]
@@ -208,3 +237,14 @@
         refine-class-button {:text refine-class-text
                              :route "refine-endgame-class"}]
     (conj (vec cycle-class-buttons) refine-class-button)))
+
+(defn force-move [state san]
+  (let [fen (u/get-fen state)
+        move (chess/san-to-move fen san)]
+    (if (u/legal-move? state move)
+      (-> state
+          (u/do-move move)
+          battle/set-opponent-must-move)
+      state)))
+
+(get-material "7K/8/4r3/3k4/8/8/8/1Q6 w - - 0 1")

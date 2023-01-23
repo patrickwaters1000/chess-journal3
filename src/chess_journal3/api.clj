@@ -10,6 +10,7 @@
     [chess-journal3.modes.edit :as edit]
     [chess-journal3.modes.endgames :as endgames]
     [chess-journal3.modes.games :as games]
+    [chess-journal3.modes.live-games :as live-games]
     [chess-journal3.modes.menu :as menu]
     [chess-journal3.modes.review :as review]
     [chess-journal3.modes.setup :as setup]
@@ -41,6 +42,9 @@
 ;; 25. Add opponent lines to endgames mode
 ;; 28. Init functions for various modes are not complete. E.g., reset board to
 ;;     initial fen when starting review mode.
+;; 30. Add "force move" to endgames -- prompt the user for a different computer move.
+;; 31. Each mode should have an exit function to clean up the app state when
+;;     leaving the mode.
 
 (def initial-state
   {:db db/db
@@ -63,7 +67,9 @@
    :promote-piece "Q"
    :endgames nil
    :endgame-class []
-   :endgame-idx 0})
+   :endgame-idx 0
+   :live-game-names nil
+   :live-game-idx nil})
 
 (def state
   (atom initial-state))
@@ -105,6 +111,9 @@
    :promotePiece (:promote-piece state)
    :endgameClassButtonConfigs (when (= "endgames" (:mode state))
                                 (endgames/get-button-configs state))
+   :liveGameName (when (and (:live-game-names state)
+                            (:live-game-idx state))
+                   (live-games/get-current-game-name state))
    :error (:error state)})
 
 (defn route [msg f & args]
@@ -122,6 +131,8 @@
 ;; on the mode.
 (defroutes app
   (GET "/" [] (slurp "front/dist/index.html"))
+  (GET "/state" [] (with-out-str
+                     (clojure.pprint/pprint @state)))
   (GET "/main.js" [] (slurp "front/dist/main.js"))
   (POST "/start" _ (route "Start" menu/init))
   (POST "/click-square" {body :body}
@@ -139,7 +150,8 @@
               "battle" battle/init
               "games" games/init
               "setup" setup/init
-              "endgames" endgames/init)]
+              "endgames" endgames/init
+              "live-games" live-games/init)]
       (route (format "%s mode" mode) f)))
   (POST "/select-game" {body :body}
     (let [game-tag (json/parse-string (slurp body))]
@@ -160,11 +172,24 @@
   (POST "/save-endgame" _ (route "Save endgame" endgames/save))
   (POST "/delete-endgame" _ (route "Delete endgame" endgames/delete))
   (POST "/cycle-endgame-class" {body :body}
-    (let [level (json/parse-string (slurp body))]
-      (route "Cycle endgame class" endgames/cycle-class level)))
-  (POST "/refine-endgame-class" _ (route "Cycle endgame class" endgames/refine-class))
+    (let [level (json/parse-string (slurp body))
+          msg (format "Cycle endgame class at level %s" level)]
+      (println (dissoc @state :endgames))
+      (route msg endgames/cycle-class level)))
+  (POST "/refine-endgame-class" _ (route "Refine endgame class" endgames/refine-class))
   (POST "/next-endgame" _ (route "Next endgame" endgames/next))
   (POST "/previous-endgame" _ (route "Previous endgame" endgames/previous))
+  (POST "/force-move" {body :body}
+    (let [move (json/parse-string (slurp body))]
+      (route "Force move" endgames/force-move move)))
+  (POST "/new-live-game" {body :body}
+    (let [game-name (json/parse-string (slurp body))]
+      (route "New live game" live-games/new game-name)))
+  (POST "/cycle-live-game" _ (route "Cycle live game" live-games/cycle-game))
+  (POST "/save-live-game" _ (route "Save live game" live-games/save))
+  (POST "/end-live-game" {body :body}
+    (let [result (json/parse-string (slurp body))]
+      (route "End live game" live-games/end result)))
   (POST "/key" {body :body}
     (let [keycode (json/parse-string (slurp body))]
       (case keycode
