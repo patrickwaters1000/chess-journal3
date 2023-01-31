@@ -66,7 +66,7 @@
   (player-has-piece-on-square? (update state :color other-color)
                                square))
 
-(defn- get-move [state to-square]
+(defn get-move [state to-square]
   (let [{from-square :selected-square
          promote-piece :promote-piece} state
         piece-to-move (get-piece-on-square state from-square)

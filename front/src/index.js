@@ -138,6 +138,7 @@ class Page extends React.Component {
               promotePiece,
               endgameClassButtonConfigs,
               liveGameName,
+              endgameEvaluation,
             } = this.state;
         let buttons;
         if (mode == "menu") {
@@ -207,6 +208,7 @@ class Page extends React.Component {
                 Button({ name: "cycle-promote-piece", text: `Promotions to ${promotePiece}` }),
                 Button({ name: "delete-endgame", text: "Delete", confirm: true }),
                 Button({ name: "force-move", text: "Force move", prompt: "Move:" }),
+                Button({ name: "toggle-evaluation", text: endgameEvaluation }),
             ];
         } else if (mode == "live-games") {
             buttons = [
@@ -292,6 +294,9 @@ document.addEventListener("keydown", (e) => {
         }
     } else {
         switch (e.code) {
+        case "KeyL":
+            key = "l";
+            break;
         case "KeyK":
             key = "k";
             break;

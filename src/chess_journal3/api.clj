@@ -1,6 +1,7 @@
 (ns chess-journal3.api
   (:require
     [cheshire.core :as json]
+    [chess-journal3.constants :as c]
     [chess-journal3.core :as core]
     [chess-journal3.db :as db]
     [chess-journal3.engine :as engine]
@@ -15,6 +16,7 @@
     [chess-journal3.modes.review :as review]
     [chess-journal3.modes.setup :as setup]
     [chess-journal3.pgn :as pgn]
+    [chess-journal3.tablebase :as tablebase]
     [chess-journal3.utils :as u]
     [clj-time.core :as t]
     [clojure.string :as string]
@@ -47,29 +49,9 @@
 ;;     leaving the mode.
 
 (def initial-state
-  {:db db/db
-   :engine (engine/make)
-   :engine-elo nil
-   :engine-movetime (t/seconds 5)
-   :color "w"
-   :fen->moves {}
-   ;; TODO Rename, since used not just in review mode
-   :lines []
-   :mode "menu"
-   :locked-idx 0
-   :fens [fen/initial]
-   :sans []
-   :idx 0
-   :selected-square nil
-   :opponent-must-move false
-   :game->score nil
-   :setup-selected-piece nil
-   :promote-piece "Q"
-   :endgames nil
-   :endgame-class []
-   :endgame-idx 0
-   :live-game-names nil
-   :live-game-idx nil})
+  (assoc c/initial-state
+    :db db/db
+    :engine (engine/make)))
 
 (def state
   (atom initial-state))
@@ -111,6 +93,12 @@
    :promotePiece (:promote-piece state)
    :endgameClassButtonConfigs (when (= "endgames" (:mode state))
                                 (endgames/get-button-configs state))
+   :endgameEvaluation (when (= "endgames" (:mode state))
+                        (if (:show-endgame-evaluation state)
+                          (->> (u/get-fen state)
+                               tablebase/probe
+                               (tablebase/interpret-result state))
+                          "Show evaluation"))
    :liveGameName (when (and (:live-game-names state)
                             (:live-game-idx state))
                    (live-games/get-current-game-name state))
@@ -119,12 +107,9 @@
 (defn route [msg f & args]
   (println msg)
   (apply swap! state f args)
-  ;;(log-state)
   (let [v (view @state)
         resp (json/generate-string v)]
     (swap! state dissoc :error :opponent-must-move)
-    (println (format "Sending state with opponentMustMove=%s"
-                     (:opponentMustMove v)))
     resp))
 
 ;; As the app becomes meatier, the meanings of keys, etc., will have to depend
@@ -179,6 +164,7 @@
   (POST "/refine-endgame-class" _ (route "Refine endgame class" endgames/refine-class))
   (POST "/next-endgame" _ (route "Next endgame" endgames/next))
   (POST "/previous-endgame" _ (route "Previous endgame" endgames/previous))
+  (POST "/toggle-evaluation" _ (route "Toggle evaluation" endgames/toggle-evaluation))
   (POST "/force-move" {body :body}
     (let [move (json/parse-string (slurp body))]
       (route "Force move" endgames/force-move move)))
@@ -203,9 +189,19 @@
                                       (route "Set selected piece"
                                              setup/set-selected-piece
                                              keycode))
+        "l" (do (log-state)
+                (route "Log state" identity))
         (println (format "Unexpected keyboard event %s" keycode))))))
 
 (defn -main [& _]
   (println "Ready!")
   (run-server (rmp/wrap-params app)
               {:port 3000}))
+
+(comment
+  (def s1 initial-state)
+  (def s2 (review/init s1))
+  (def s3 (core/click-square s2 "E2"))
+  (def s4 (core/click-square s2 "E4"))
+  ;;
+  )

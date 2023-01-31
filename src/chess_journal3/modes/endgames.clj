@@ -190,7 +190,8 @@
                               (cycle-subclass 1 endgames))]
     (-> state
         (assoc :endgame-class new-endgame-class
-               :endgame-idx 0)
+               :endgame-idx 0
+               :show-endgame-evaluation false)
         reset-board)))
 
 (defn refine-class [state]
@@ -247,4 +248,5 @@
           battle/set-opponent-must-move)
       state)))
 
-(get-material "7K/8/4r3/3k4/8/8/8/1Q6 w - - 0 1")
+(defn toggle-evaluation [state]
+  (update state :show-endgame-evaluation not))

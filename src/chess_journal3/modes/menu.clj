@@ -1,4 +1,6 @@
-(ns chess-journal3.modes.menu)
+(ns chess-journal3.modes.menu
+  (:require
+    [chess-journal3.constants :as c]))
 
 (defn init [state]
-  (assoc state :mode "menu"))
+  (merge state c/initial-state))

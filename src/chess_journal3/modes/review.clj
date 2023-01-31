@@ -39,6 +39,13 @@
         correct-san (:san (nth (first lines) (inc idx)))]
     (= correct-san san)))
 
+(defn- do-move [state square]
+  (let [move (u/get-move state square)]
+    (-> state
+        (u/do-move move)
+        ;; Handle end of line
+        (assoc :opponent-must-move true))))
+
 (defn click-square [state square]
   (let [{:keys [selected-square]} state]
     (cond
@@ -52,7 +59,7 @@
       (and selected-square
            (u/players-move? state)
            (move-to-square-is-correct? state square))
-        (u/try-move state square)
+        (do-move state square)
       :else
         state)))
 
