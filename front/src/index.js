@@ -219,6 +219,7 @@ class Page extends React.Component {
                 Button({ name: "cycle-live-game", text: liveGameName }),
                 Button({ name: "end-live-game", text: "Complete", prompt: "Result" }),
                 Button({ name: "save-live-game", text: "Save" }),
+                Button({ name: "switch-color", text: `You are ${playerColor.toUpperCase()}` }),
             ];
         } else {
             buttons = [];

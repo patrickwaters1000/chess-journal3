@@ -45,7 +45,8 @@
              "setup") lines/switch-color
             "review" review/switch-color
             ("battle"
-             "endgames") battle/switch-color)]
+             "endgames"
+             "live-games") battle/switch-color)]
     (f state)))
 
 (defn click-square [state square]
