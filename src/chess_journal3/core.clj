@@ -42,7 +42,7 @@
 (defn switch-color [state]
   (let [f (case (:mode state)
             ("edit"
-             "setup") lines/switch-color
+             "setup") edit/switch-color
             "review" review/switch-color
             ("battle"
              "endgames"
@@ -91,7 +91,7 @@
                  "games" 1
                  "edit" 1)]
     (->> lines
-         (filter (partial lines/matches-current-line
+         (filter (partial u/matches-current-line
                           ;; Terrible
                           (cond-> state
                             (= mode "review") (update :idx dec))))
@@ -112,3 +112,15 @@
      "B" "R"
      "R" "Q"
      "Q" "N"}))
+
+(defn alternative-move [state san]
+  (let [{:keys [mode]} state
+        state* (if (= "review" mode)
+                 (u/undo-last-move state)
+                 state)
+        fen (u/get-fen state*)
+        m (chess/san-to-move fen san)]
+    (-> state*
+        (u/do-move m)
+        (assoc :opponent-must-move false)
+        lines/cycle-to-first-matching-line)))

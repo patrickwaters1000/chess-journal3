@@ -119,3 +119,10 @@
       :fens new-fens
       :sans new-sans
       :idx new-idx)))
+
+(defn matches-current-line [state line]
+  (let [{:keys [idx]} state]
+    (and (<= 0 idx)
+         (< idx (count line))
+         (= (get-fen state)
+            (:final-fen (nth line idx))))))

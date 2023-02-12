@@ -434,7 +434,7 @@ WHERE parent.name = '%s'"
   ;;
   )
 
-(defn get-tagged-moves [db tag & {:keys [include-children]}]
+(defn get-tagged-moves [db tag & {:keys [include-child-tags]}]
   (let [children (get-child-tags db tag)
         tags (cond-> [tag]
                include-children (concat children))

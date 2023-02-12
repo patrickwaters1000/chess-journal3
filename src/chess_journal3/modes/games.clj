@@ -6,14 +6,20 @@
     [chess-journal3.utils :as u]
     [clojure.string :as string]))
 
+(defn get-next-move [state]
+  (let [{:keys [review-lines idx]} state
+        fen (u/get-fen state)
+        san (:san (nth (first review-lines) (inc idx)))]
+    (chess/san-to-move fen san)))
+
 (defn next-frame [state]
   (let [{:keys [idx fens mode]} state]
     (if (< idx (dec (count fens)))
       (update state :idx inc)
-      (u/do-move state (lines/get-next-move state)))))
+      (u/do-move state (get-next-move state)))))
 
 (defn next-move [state]
-  (u/do-move state (lines/get-next-move state)))
+  (u/do-move state (get-next-move state)))
 
 (defn next-frame [state]
   (-> state
@@ -46,7 +52,7 @@
 
 (defn get-games [state]
   (->> (:lines state)
-       (filter (partial lines/matches-current-line state))
+       (filter (partial u/matches-current-line state))
        (map #(nth % (inc (:idx state))))
        (map (fn [{:keys [tag san]}]
               (let [[white black date time] (string/split tag #"__")

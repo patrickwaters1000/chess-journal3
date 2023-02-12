@@ -13,9 +13,19 @@
       lines/load-lines
       u/reset-board))
 
+(defn get-moves-tag [state]
+  (let [{:keys [mode color]} state]
+    (if (= "games" mode)
+      (case color
+        "w" "white-games"
+        "b" "black-games")
+      (case color
+        "w" "white-reportoire"
+        "b" "black-reportoire"))))
+
 (defn get-line-data [state]
   (let [{:keys [fens sans]} state
-        tag (lines/get-moves-tag state)]
+        tag (get-moves-tag state)]
     (map (fn [[initial-fen final-fen] san]
            {:tag tag
             :initial-fen initial-fen
@@ -29,10 +39,14 @@
         active-color (-> fens last fen/parse :active-color)]
     (not= color active-color)))
 
+(defn get-moves
+  ([state] (get-moves state (u/get-fen state)))
+  ([state fen] (get (:fen->moves state) fen)))
+
 (defn move-conflicts-with-reportoire?
   [state {:keys [initial-fen san]}]
   (let [;; There should be 0 or 1 reportoire moves.
-        reportoire-moves (->> (lines/get-moves state initial-fen)
+        reportoire-moves (->> (get-moves state initial-fen)
                               (map :san)
                               (into #{}))]
     (and (seq reportoire-moves)
@@ -49,7 +63,7 @@
   where the conflict starts."
   [state]
   (let [{:keys [color]} state
-        tag (lines/get-moves-tag state)]
+        tag (get-moves-tag state)]
     (->> (get-line-data state)
          (filter #(= color (-> (:initial-fen %)
                                fen/parse
@@ -102,7 +116,7 @@
                    state)
           initial-fen (u/get-fen (update state* :idx dec))
           final-fen (u/get-fen state*)
-          old-tag (lines/get-moves-tag state*)
+          old-tag (get-moves-tag state*)
           new-tag (case old-tag
                     "white-reportoire" "deleted-white-reportoire"
                     "black-reportoire" "deleted-black-reportoire")]
@@ -128,3 +142,10 @@
         (u/try-move state square)
       :else
         state)))
+
+(defn switch-color [state]
+  (-> state
+      (update :color u/other-color)
+      lines/load-fen->moves
+      lines/load-lines
+      u/reset-board))

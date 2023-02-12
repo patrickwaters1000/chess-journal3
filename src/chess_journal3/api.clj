@@ -125,7 +125,7 @@
       (route (format "Click square %s" square) core/click-square square)))
   (POST "/alternative-move" {body :body}
     (let [san (json/parse-string (slurp body))]
-      (route (format "Alternative move %s" san) lines/alternative-move san)))
+      (route (format "Alternative move %s" san) core/alternative-move san)))
   (POST "/set-mode" {body :body}
     (let [mode (json/parse-string (slurp body))
           f (case mode
