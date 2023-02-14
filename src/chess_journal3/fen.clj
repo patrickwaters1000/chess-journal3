@@ -109,3 +109,20 @@
                 (get p :enpassant-square "-")
                 (:halfmove-clock p)
                 (:fullmove-counter p)]))
+
+(defn get-active-color [fen]
+  (-> fen parse :active-color))
+
+(defn players-move? [fen color]
+  (= color (get-active-color fen)))
+
+(defn opponents-move? [fen color]
+  (not= color (get-active-color fen)))
+
+(defn piece-on-square [fen square]
+  (-> fen parse :square->piece (get square)))
+
+(defn color-of-piece [piece]
+  (if (= piece (string/upper-case piece))
+    "w"
+    "b"))

@@ -1,9 +1,12 @@
 (ns chess-journal3.db
   (:require
     [chess-journal3.constants :refer [username]]
+    [chess-journal3.move :as move]
     [clj-time.core :as t]
     [clojure.java.jdbc :as jdbc]
-    [clojure.string :as string]))
+    [clojure.string :as string])
+  (:import
+    (chess_journal3.move Move)))
 
 (def db {:user "pwaters" ;; or "patrick"
          :dbtype "postgresql"
@@ -436,14 +439,15 @@ WHERE parent.name = '%s'"
 
 (defn get-tagged-moves [db tag & {:keys [include-child-tags]}]
   (let [children (get-child-tags db tag)
-        tags (cond-> [tag]
-               include-children (concat children))
+        tags (if include-child-tags
+               (concat [tag] children)
+               [tag])
         template "
 SELECT
   t.name AS tag,
   m.san AS san,
-  p1.fen AS initial_fen,
-  p2.fen AS final_fen
+  p1.fen AS from,
+  p2.fen AS to
 FROM tagged_moves tm
   LEFT JOIN tags t ON tm.tag_id = t.id
   LEFT JOIN moves m ON tm.move_id = m.id
@@ -455,8 +459,8 @@ WHERE t.name IN (%s)
                    (map #(format "'%s'" %))
                    (string/join ", "))
         query (format template param)]
-    (map hyphenate-keys
-         (jdbc/query db query))))
+    (->> (jdbc/query db query)
+         (map move/new))))
 
 (comment
   ;; Other arity of `get-tagged-moves` not used

@@ -1,9 +1,20 @@
-(ns chess-journal3.modes.edit
+(ns chess-journal3.modes.openings.edit
   (:require
     [chess-journal3.db :as db]
     [chess-journal3.fen :as fen]
     [chess-journal3.lines :as lines]
-    [chess-journal3.utils :as u]))
+    [chess-journal3.modes.openings.review :as review]
+    [chess-journal3.utils :as u])
+  (:import
+    (chess_journal3.tree Tree)))
+
+(defrecord OpeningsEditor
+  [mode
+   tree
+   color
+   selected-square
+   promote-piece
+   db])
 
 (defn init [state]
   (-> state
@@ -12,27 +23,6 @@
       lines/load-fen->moves
       lines/load-lines
       u/reset-board))
-
-(defn get-moves-tag [state]
-  (let [{:keys [mode color]} state]
-    (if (= "games" mode)
-      (case color
-        "w" "white-games"
-        "b" "black-games")
-      (case color
-        "w" "white-reportoire"
-        "b" "black-reportoire"))))
-
-(defn get-line-data [state]
-  (let [{:keys [fens sans]} state
-        tag (get-moves-tag state)]
-    (map (fn [[initial-fen final-fen] san]
-           {:tag tag
-            :initial-fen initial-fen
-            :final-fen final-fen
-            :san san})
-         (partition 2 1 (:fens state))
-         (:sans state))))
 
 (defn line-ends-with-opponent-to-play? [state]
   (let [{:keys [fens color]} state
