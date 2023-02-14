@@ -2,7 +2,7 @@
   (:require
     [chess-journal3.db :as db]
     [chess-journal3.fen :as fen]
-    [chess-journal3.lines :as lines]
+    [chess-journal3.line :as line]
     [chess-journal3.modes.openings.review :as review]
     [chess-journal3.utils :as u])
   (:import
@@ -24,19 +24,14 @@
       lines/load-lines
       u/reset-board))
 
-(defn line-ends-with-opponent-to-play? [state]
-  (let [{:keys [fens color]} state
-        active-color (-> fens last fen/parse :active-color)]
+(defn line-ends-with-opponent-to-play? [line color]
+  (let [active-color (-> line line/final-fen fen/active-color)]
     (not= color active-color)))
 
-(defn get-moves
-  ([state] (get-moves state (u/get-fen state)))
-  ([state fen] (get (:fen->moves state) fen)))
-
 (defn move-conflicts-with-reportoire?
-  [state {:keys [initial-fen san]}]
+  [tree move]
   (let [;; There should be 0 or 1 reportoire moves.
-        reportoire-moves (->> (get-moves state initial-fen)
+        reportoire-moves (->> (tree/get-moves tree)
                               (map :san)
                               (into #{}))]
     (and (seq reportoire-moves)
@@ -51,7 +46,7 @@
 
   If there is no conflict, returns `nil`; otherwise returns a map identifying
   where the conflict starts."
-  [state]
+  [tree color line]
   (let [{:keys [color]} state
         tag (get-moves-tag state)]
     (->> (get-line-data state)
