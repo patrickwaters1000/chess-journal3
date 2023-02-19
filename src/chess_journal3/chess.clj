@@ -13,7 +13,7 @@
 ;;-------------     Converting between representations of moves      ----------;;
 ;;-----------------------------------------------------------------------------;;
 
-(defn- parse-promote-piece [^Move m]
+(defn- parse-promote-piece [^com.github.bhlangonijr.chesslib.move.Move m]
   (let [^Piece p (.getPromotion m)
         ^PieceType t (.getPieceType p)]
     (when t
@@ -23,22 +23,21 @@
         PieceType/ROOK "R"
         PieceType/QUEEN "Q"))))
 
-(defn- ^Piece unparse-promote-piece [move]
-  (let [{:keys [to promote]} move
-        rank (Integer/parseInt (subs to 1 2))]
+(defn- ^Piece unparse-promote-piece [to-square promote-piece]
+  (let [rank (Integer/parseInt (subs to-square 1 2))]
     (case rank
-      8 (case promote
+      8 (case promote-piece
           "N" Piece/WHITE_KNIGHT
           "B" Piece/WHITE_BISHOP
           "R" Piece/WHITE_ROOK
           "Q" Piece/WHITE_QUEEN)
-      1 (case promote
+      1 (case promote-piece
           "N" Piece/BLACK_KNIGHT
           "B" Piece/BLACK_BISHOP
           "R" Piece/BLACK_ROOK
           "Q" Piece/BLACK_QUEEN))))
 
-(defn- object-to-san [fen ^Move m]
+(defn- object-to-san [fen ^com.github.bhlangonijr.chesslib.move.Move m]
   (let [move-list (MoveList. fen)]
     (.add move-list m)
     (first (.toSanArray move-list))))
@@ -48,41 +47,26 @@
     (.loadFromSan move-list san)
     (first move-list)))
 
-(defn- object-to-move [^Move m]
-  (let [^Piece p (.getPromotion m)
-        promote-piece (parse-promote-piece m)]
-    (cond-> {:from (str (.getFrom m))
-             :to (str (.getTo m))}
-      promote-piece (assoc :promote promote-piece))))
-
-(defn- move-to-object [move]
-  (let [{:keys [to
-                from
-                promote]} move
-        from-square (Square/valueOf (string/upper-case from))
+(defn- move-to-object [from to promote]
+  (let [from-square (Square/valueOf (string/upper-case from))
         to-square (Square/valueOf (string/upper-case to))
-        promotePiece (when promote
-                       (unparse-promote-piece move))]
+        promote-piece (when promote
+                        (unparse-promote-piece to promote))]
     (if promote
-      (Move. from-square to-square promotePiece)
+      (Move. from-square to-square promote-piece)
       (Move. from-square to-square))))
 
-(defn move-to-san
-  [fen move]
-  {:pre [(:from move)
-         (:to move)]}
-  (->> (move-to-object move)
+;; TODO Handle invalid inputs.
+(defn get-san
+  [fen from-square to-square & {:keys [promote]}]
+  (->> (move-to-object from-square to-square promote)
        (object-to-san fen)))
-
-(defn san-to-move [fen san]
-  (object-to-move
-    (san-to-object fen san)))
 
 ;;-----------------------------------------------------------------------------;;
 ;;-------------                   Applying moves                     ----------;;
 ;;-----------------------------------------------------------------------------;;
 
-(defn apply-move-san [fen san]
+(defn apply-san [fen san]
   (let [board (Board.)
         move-list (MoveList. fen)]
     (.loadFromFen board fen)
@@ -90,25 +74,15 @@
     (.doMove board (first move-list))
     (.getFen board)))
 
-(defn apply-move [fen move]
-  (let [san (move-to-san fen move)]
-    (apply-move-san fen san)))
-
 ;;-----------------------------------------------------------------------------;;
 ;;-------------               Legal moves / checking                 ----------;;
 ;;-----------------------------------------------------------------------------;;
 
-(defn get-legal-move-sans [fen]
+(defn get-legal-moves [fen]
   (let [board (Board.)]
     (.loadFromFen board fen)
     (->> (MoveGenerator/generateLegalMoves board)
          (map (partial object-to-san fen)))))
 
-(defn legal-move-san? [fen san]
+(defn legal-move? [fen san]
   (contains? (set (get-legal-move-sans fen)) san))
-
-(defn legal-move? [fen move]
-  (contains? (->> (get-legal-move-sans fen)
-                  (map (partial san-to-move fen))
-                  (into #{}))
-             move))

@@ -1,10 +1,12 @@
 (ns chess-journal3.line
   (:require
     [chess-journal3.constants :as c]
+    [chess-journal3.fen :as fen]
     [chess-journal3.move :as move])
   (:import
     (chess_journal3.move Move)))
 
+;; There will be one more fen than san.
 (defrecord Line
   [fens
    sans
@@ -38,7 +40,7 @@
       (update :fens conj (move/to m))
       (update :sans conj (move/san m))))
 
-(defn delete-last [^Line l]
+(defn drop-last-move [^Line l]
   {:pre [(pos? (length l))]}
   (-> l
       (update :fens (comp vec drop-last))
@@ -69,3 +71,12 @@
   {:pre [(< (inc (:idx l))
             (length l))]}
   (update l :idx inc))
+
+(defn ends-with-opponent-to-play? [^Line l color]
+  (not= color (-> l final-fen fen/get-active-color)))
+
+(defn truncate-at-current-fen [^Line l]
+  (let [{:keys [idx]} l]
+    (-> l
+        (update :fens (comp vec #(take (inc idx) %)))
+        (update :sans (comp vec #(take idx %))))))

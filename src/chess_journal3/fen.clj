@@ -1,5 +1,6 @@
 (ns chess-journal3.fen
   (:require
+    [chess-journal3.utils :as u]
     [clojure.string :as string]))
 
 (def empty "8/8/8/8/8/8/8/8 w - - 0 1")
@@ -126,3 +127,14 @@
   (if (= piece (string/upper-case piece))
     "w"
     "b"))
+
+(defn player-has-piece-on-square? [fen color square]
+  (let [piece (piece-on-square fen square)]
+    (and piece
+         (= color (color-of-piece piece)))))
+
+(defn opponent-has-piece-on-square? [fen color square]
+  (player-has-piece-on-square? fen (u/other-color color) square))
+
+(defn active-player-has-piece-on-square? [fen square]
+  (player-has-piece-on-square? fen (get-active-color fen) square))

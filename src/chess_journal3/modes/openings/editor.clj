@@ -1,129 +1,117 @@
-(ns chess-journal3.modes.openings.edit
+(ns chess-journal3.modes.openings.editor
   (:require
+    [chess-journal3.constants :as c]
     [chess-journal3.db :as db]
     [chess-journal3.fen :as fen]
     [chess-journal3.line :as line]
     [chess-journal3.modes.openings.review :as review]
+    [chess-journal3.move :as move]
+    [chess-journal3.tree :as tree]
     [chess-journal3.utils :as u])
   (:import
     (chess_journal3.tree Tree)))
 
 (defrecord OpeningsEditor
   [mode
-   tree
+   ^Tree tree
    color
    selected-square
    promote-piece
+   error
    db])
 
 (defn init [state]
-  (-> state
-      (assoc :mode "edit")
-      (assoc :game->won nil)
-      lines/load-fen->moves
-      lines/load-lines
-      u/reset-board))
+  (let [{:keys [db
+                color
+                promote-piece]} state
+        move-tag (review/get-move-tag color)
+        moves (db/get-tagged-moves db move-tag)
+        line (line/stub c/initial-fen)
+        tree (tree/new moves line)]
+    (-> {:mode "openings-editor"
+         :color color
+         :selected-square nil
+         :promote-piece promote-piece
+         :db db
+         :error nil}
+        map->OpeningsEditor)))
 
-(defn line-ends-with-opponent-to-play? [line color]
-  (let [active-color (-> line line/final-fen fen/active-color)]
-    (not= color active-color)))
+(defn reload-tree [state]
+  (let [{:keys [db
+                tree
+                color]} state
+        line (tree/get-line tree)
+        move-tag (review/get-move-tag color)
+        moves (db/get-tagged-moves db move-tag)]
+    (assoc state :tree (tree/new moves line))))
 
 (defn move-conflicts-with-reportoire?
   [tree move]
-  (let [;; There should be 0 or 1 reportoire moves.
-        reportoire-moves (->> (tree/get-moves tree)
-                              (map :san)
-                              (into #{}))]
+  (let [reportoire-moves (tree/get-moves tree)]
+    (assert (contains? #{0 1} (count reportoire-moves)))
     (and (seq reportoire-moves)
-         (not (contains? reportoire-moves san)))))
+         (not (some #(move/equals move %) reportoire-moves)))))
 
 (defn line-conflicts-with-reportoire?
-  "Currently within each reportoire 'tag', there must be at most one move
-  selected for the player for each position. This makes it easier to generate a
-  list of review lines starting from a position. To add secondary moves, you
+  "Returns `nil` if the line does not conflict with the reportoire.
+  Otherwise returns the first conflicting move.
+
+  Currently within each reportoire 'tag', there must be at most one move
+  selected for the player for each position. To add secondary moves, you
   must add them under a separate reportoire tag, e.g.,
-  'white-reportoire-2nd-choices'.
-
-  If there is no conflict, returns `nil`; otherwise returns a map identifying
-  where the conflict starts."
+  'white-reportoire-2nd-choices'."
   [tree color line]
-  (let [{:keys [color]} state
-        tag (get-moves-tag state)]
-    (->> (get-line-data state)
-         (filter #(= color (-> (:initial-fen %)
-                               fen/parse
-                               :active-color)))
-         (map (fn [n m] (assoc m
-                          :fullmove-counter n
-                          :active-color color))
-              (map inc (range)))
-         (filter (partial move-conflicts-with-reportoire? state))
-         (map #(select-keys % [:fullmove-counter
-                               :active-color
-                               :san]))
-         first)))
-
-(defn add-line!* [state]
-  (let [{:keys [db]} state
-        line-data (get-line-data state)]
-    (db/insert-tagged-moves! db line-data)
-    (-> state
-        lines/load-fen->moves
-        lines/load-lines)))
+  (->> (line/to-moves line)
+       (filter #(= color (move/get-color %)))
+       (filter (partial move-conflicts-with-reportoire? tree))
+       first))
 
 (defn add-line! [state]
-  (let [{:keys [san
-                fullmove-counter
-                active-color]
-         :as conflict} (line-conflicts-with-reportoire? state)]
-    (cond
-      (not (line-ends-with-opponent-to-play? state))
-        (assoc state
-          :error (format "Line must end with %s play"
-                         (case (:color state) "b" "white" "w" "black")))
-      (some? conflict)
-        (assoc state
-          :error (format "Line conflicts at %s. %s%s"
-                         fullmove-counter
-                         (if (= "color" "b") ".. " "")
-                         san))
-      :else (add-line!* state))))
+  (let [{:keys [db tree color]} state
+        line (tree/get-line tree)
+        conflicting-move (line-conflicts-with-reportoire? tree color line)
+        error (cond
+                (not (line/ends-with-opponent-to-play? line))
+                  (format "Line must end with %s play"
+                          (u/other-color color))
+                conflicting-move
+                  (format "Line conflicts at %s from %s"
+                          (move/san conflicting-move)
+                          (move/from-fen conflicting-move)))]
+    (if error
+      (assoc state :error error)
+      (do (db/insert-tagged-moves! db (line/to-moves line))
+          (reload-tree state)))))
 
 (defn delete-subtree! [state]
-  (if (or (zero? (:idx state))
-          (and (= 1 (:idx state))
-               (= "b" (:color state))))
-    (assoc state :error "Deleting the entire reportoire isn't allowed.")
-    (let [{:keys [db]} state
-          ;; This next part is tricky; draw a move tree diagram to understand it.
-          state* (if (u/opponents-move? state)
-                   (u/undo-last-move state)
-                   state)
-          initial-fen (u/get-fen (update state* :idx dec))
-          final-fen (u/get-fen state*)
-          old-tag (get-moves-tag state*)
-          new-tag (case old-tag
+  (if-not (-> state :tree tree/get-fen fen/players-move?)
+    (assoc state :error "Can only delete subtree when it's your move.")
+    (let [{:keys [db tree color]} state
+          new-tag (case (review/get-moves-tag color)
                     "white-reportoire" "deleted-white-reportoire"
                     "black-reportoire" "deleted-black-reportoire")]
-      (->> (lines/get-branches-of-subtree state* initial-fen)
-           (map rest)
-           (filter #(= final-fen (:final-fen (first %))))
-           (apply concat)
-           (map #(assoc % :old-tag old-tag :new-tag new-tag))
-           (db/update-move-tags! db))
-      (u/undo-last-move state*))))
+      (->> (tree/get-lines-from-current-fen tree)
+           (mapcat line/get-moves)
+           (into #{})
+           (db/update-move-tags! db new-tag))
+      (-> state
+          (update :tree tree/truncate-line-at-current-fen)
+          reload-tree))))
 
 (defn click-square [state square]
-  (let [{:keys [selected-square]} state]
+  (let [{:keys [selected-square
+                color
+                tree]} state
+        fen (tree/get-fen tree)
+        san (chess/move-to-san*)]
     (cond
-      ;; TODO Check that that player has the move
       (and (not= selected-square square)
-           (or (u/player-has-piece-on-square? state square)
-               (u/opponent-has-piece-on-square? state square)))
+           (fen/active-player-has-piece-on-square? fen color square))
         (assoc state :selected-square square)
       (= selected-square square)
         (assoc state :selected-square nil)
-      (and selected-square)
+      (and selected-square
+           (chess/legal-move?-san fen san))
         (u/try-move state square)
       :else
         state)))

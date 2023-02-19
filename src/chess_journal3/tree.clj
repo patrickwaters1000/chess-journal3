@@ -117,7 +117,10 @@
         map->Tree
         complete-line)))
 
-(defn fen [^Tree t]
+(defn get-line [^Tree t]
+  (:line t))
+
+(defn get-fen [^Tree t]
   (line/fen (:line t)))
 
 (defn line-complete? [^Tree t]
@@ -134,3 +137,20 @@
 
 (defn get-sans [^Tree t]
   (map :san (get-moves t)))
+
+(defn get-lines-from-current-fen [^Tree t]
+  (let [fen (get-fen t)
+        num-lines (get-in t [:fen->num-lines fen])]
+    (:lines (reduce (fn [{:keys [lines
+                                 tree]
+                          :as acc}
+                         _]
+                      (-> acc
+                          (update :lines conj (get-line tree))
+                          (update :tree next-line)))
+                    {:lines []
+                     :tree (assoc t :initial-fen fen :base-fen fen)}
+                    (range num-lines)))))
+
+(defn truncate-line-at-current-fen [^Tree t]
+  (update t :line line/truncate-at-current-fen))

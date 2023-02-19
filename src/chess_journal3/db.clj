@@ -153,9 +153,9 @@ ON CONFLICT DO NOTHING;
         query (format template values)]
     (jdbc/execute! db query)))
 
-(defn insert-moves! [db data]
-  (->> data
-       (mapcat (juxt :initial-fen :final-fen))
+(defn insert-moves! [db moves]
+  (->> moves
+       (mapcat (juxt move/from-fen move/to-fen))
        (into #{})
        (insert-positions! db))
   (let [template "
@@ -170,7 +170,7 @@ FROM t
   LEFT JOIN positions p2 ON t.final_fen = p2.fen
 ON CONFLICT DO NOTHING;
 "
-        values (->> data
+        values (->> moves
                     (map (fn [{:keys [initial-fen final-fen san]}]
                            (format "('%s', '%s', '%s')"
                                    initial-fen final-fen san)))
@@ -192,8 +192,11 @@ ON CONFLICT DO NOTHING;
     (jdbc/execute! db query)))
 
 ;; Rows of `data` have keys tag, initial-fen, san, final-fen
-(defn insert-tagged-moves! [db data]
-  (insert-moves! db data)
+(defn insert-tagged-moves! [db moves]
+  {:pre [(every? move/tag moves)
+         (every? move/san moves)
+         (every? move/from-fen)]}
+  (insert-moves! db moves)
   (let [template "
 WITH v(tag, initial_fen, san) AS (
   VALUES
@@ -209,10 +212,10 @@ FROM v
     AND v.san = m.san
 ON CONFLICT DO NOTHING;
 "
-        values (->> data
-                    (map (fn [{:keys [tag initial-fen san]}]
+        values (->> moves
+                    (map (fn [m]
                            (format "('%s', '%s', '%s')"
-                                   tag initial-fen san)))
+                                   (move/tag m) (move/from-fen m) (move/san m))))
                     (string/join ",\n    "))
         query (format template values)]
     (jdbc/execute! db query)))
@@ -510,7 +513,7 @@ SELECT p.fen, e.objective, e.comment
 FROM endgames e
   LEFT JOIN positions p ON e.position_id = p.id;"))
 
-(defn update-move-tags! [db data]
+(defn update-move-tags! [db new-tag moves]
   (let [template "
 WITH v(old_tag, new_tag, initial_fen, san) AS (
   VALUES
@@ -536,9 +539,9 @@ SET tag_id = input.new_tag_id
 FROM input
 WHERE tagged_moves.id = input.tagged_move_id;"
         values (->> data
-                    (map (fn [{:keys [old-tag new-tag initial-fen san]}]
+                    (map (fn [m]
                            (format "('%s', '%s', '%s', '%s')"
-                                   old-tag new-tag initial-fen san)))
+                                   (move/tag m) new-tag (move/from-fen m) (move/san m))))
                     (string/join ",\n    "))
         query (format template values)]
     (jdbc/execute! db query)))
@@ -605,5 +608,22 @@ from games g
 where t.name = 'test-1'")
   (insert-live-game!* db {:black "chess-journal3" :white "user" :date "2022-12-11"} "test-1")
   (list-live-games db)
+  ;;
+  )
+
+(defn create-backup! [db output-file]
+  (spit output-file
+        {:positions (jdbc/query db "select * from positions")
+         :moves (jdbc/query db "select * from moves")
+         :tags (jdbc/query db "select * from tags")
+         :tagged-moves (jdbc/query db "select * from tagged_moves")
+         :games (jdbc/query db "select * from games")
+         :tag-containments (jdbc/query db "select * from tag_containments")
+         :endgames (jdbc/query db "select * from endgames")}))
+
+(comment
+  (create-backup! db "db-backup-2023-02-18.edn")
+  (require '[clojure.edn :as edn])
+  (def data (edn/read-string (slurp "db-backup-2023-02-18.edn")))
   ;;
   )

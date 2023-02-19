@@ -19,7 +19,7 @@
    promote-piece
    db])
 
-(defn- get-move-tag [color]
+(defn get-move-tag [color]
   (case color
     "w" "white-reportoire"
     "b" "black-reportoire"))
@@ -44,7 +44,7 @@
         line (line/stub c/initial-fen)
         tree (tree/new moves line)
         omm (opponent-must-move? tree color)]
-    (-> {:mode "openings.review"
+    (-> {:mode "openings-review"
          :color color
          :selected-square nil
          :promote-piece promote-piece
@@ -73,7 +73,7 @@
                 tree]} state
         fen (tree/fen tree)]
     (cond
-      (and (u/player-has-piece-on-square? color fen square)
+      (and (fen/player-has-piece-on-square? fen color square)
            (not= selected-square square))
         (assoc state :selected-square square)
       (or (= selected-square square)
