@@ -1,5 +1,6 @@
 (ns chess-journal3.move
   (:require
+    [chess-journal3.chess :as chess]
     [chess-journal3.fen :as fen]))
 
 ;; TODO Fix the following confusing thing: there are two kinds of "move":
@@ -20,23 +21,27 @@
 
 (defn tag [m] (:tag m))
 
-(defn from-san [tag fen san]
+(defn new-from-san [tag fen san]
   (map->Move {:tag tag :fen fen :san san}))
 
-(defn from-squares [tag fen from-square to-square promote-piece]
-  (let [piece (fen/piece-on-square fen from-square)
-        to-rank (Integer/parseInt (subs to-square 1 2))
-        promoting (or (and (= "p" piece) (= 1 to-rank))
-                      (and (= "P" piece) (= 8 to-rank)))
-        san (if promoting
-              (chess/get-san fen from-square to-square :promote promote-piece)
-              (chess/get-san fen from-square to-square))]
-    (from-san tag fen san)))
+(defn new-from-squares [tag fen from-square to-square promote-piece]
+  {:pre [(some? fen)
+         (some? from-square)
+         (some? to-square)]}
+  (when (chess/legal-move? fen from-square to-square)
+    (let [piece (fen/piece-on-square fen from-square)
+          to-rank (Integer/parseInt (subs to-square 1 2))
+          promoting (or (and (= "p" piece) (= 1 to-rank))
+                        (and (= "P" piece) (= 8 to-rank)))
+          san (if promoting
+                (chess/get-san fen from-square to-square :promote promote-piece)
+                (chess/get-san fen from-square to-square))]
+      (from-san tag fen san))))
 
 ;; Ignores tags
 (defn equals [m1 m2]
   (and (= (san m1) (san m2))
-       (= (:fen m1) (:fen m2))))
+       (= (initial-fen m1) (initial-fen m2))))
 
 (defn get-active-color [^Move m]
-  (-> m from fen/get-active-color))
+  (-> m initial-fen fen/get-active-color))

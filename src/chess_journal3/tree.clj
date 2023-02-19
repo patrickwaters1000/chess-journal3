@@ -8,7 +8,8 @@
     (chess_journal3.move Move)))
 
 (defrecord Tree
-  [fen->moves
+  [tag
+   fen->moves
    fen->num-lines
    initial-fen ;; Lines start here.
    base-fen ;; Iteration preserves that lines go through here.
@@ -19,7 +20,7 @@
 
 (defn- supports-line? [^Tree t ^Line l]
   (and (contains-fen? t (line/initial-fen l))
-       (every? #(contains-fen? t (move/from %))
+       (every? #(contains-fen? t (move/initial-fen %))
                (line/to-moves l))))
 
 (defn- can-go-down? [^Tree t]
@@ -36,7 +37,7 @@
         previous-fen (line/penultimate-fen line)
         current-fen (line/final-fen line)
         moves (get fen->moves previous-fen)
-        idx (u/index-of-first #(= current-fen (move/to %)) moves)]
+        idx (u/index-of-first #(= current-fen (move/final-fen %)) moves)]
     (< (inc idx) (count moves))))
 
 (defn- down [^Tree t idx]
@@ -47,7 +48,7 @@
     (update t :line line/append move)))
 
 (defn- up [^Tree t]
-  (update t :line line/delete-last))
+  (update t :line line/drop-last-move))
 
 (defn- right [^Tree t]
   (let [{:keys [line
@@ -55,7 +56,7 @@
         previous-fen (line/penultimate-fen line)
         current-fen (line/final-fen line)
         moves (get fen->moves previous-fen)
-        current-idx (u/index-of-first #(= current-fen (move/to %)) moves)
+        current-idx (u/index-of-first #(= current-fen (move/final-fen %)) moves)
         idx (mod (inc current-idx)
                  (count moves))]
     (-> t up (down idx))))
@@ -85,7 +86,7 @@
         @fen->num-lines
         (let [fen (first stack)
               child-fens (->> (get fen->moves fen)
-                              (map move/to))
+                              (map move/final-fen))
               num-lines (if-not (empty? child-fens)
                           (->> child-fens
                                (map @fen->num-lines)
@@ -106,7 +107,7 @@
 
 (defn new [moves ^Line l]
   {:post [(supports-line? % l)]}
-  (let [fen->moves (group-by move/from moves)
+  (let [fen->moves (group-by move/initial-fen moves)
         initial-fen (line/initial-fen l)
         fen->num-lines (count-lines fen->moves initial-fen)]
     (-> {:fen->moves fen->moves
@@ -131,7 +132,7 @@
 
 (defn get-moves
   ([^Tree t]
-   (get-moves t (fen t)))
+   (get-moves t (get-fen t)))
   ([^Tree t fen]
    (get (:fen->moves t) fen)))
 
@@ -154,3 +155,6 @@
 
 (defn truncate-line-at-current-fen [^Tree t]
   (update t :line line/truncate-at-current-fen))
+
+(defn apply-move [^Tree t ^Move m]
+  (update t :line line/apply-move m))

@@ -1,7 +1,5 @@
 (ns chess-journal3.utils
   (:require
-    [chess-journal3.chess :as chess]
-    [chess-journal3.fen :as fen]
     [clojure.string :as string]))
 
 (defn- map-vals [f m]
@@ -27,3 +25,12 @@
 
 (defn other-color [color]
   (case color "w" "b" "b" "w"))
+
+(defn hyphenate [k]
+  (keyword (string/replace (name k) "_" "-")))
+
+(defn hyphenate-keys [m]
+  (reduce-kv (fn [acc k v]
+               (assoc acc (hyphenate k) v))
+             {}
+             m))

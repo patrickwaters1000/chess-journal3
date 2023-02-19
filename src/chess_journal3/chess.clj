@@ -75,14 +75,19 @@
     (.getFen board)))
 
 ;;-----------------------------------------------------------------------------;;
-;;-------------               Legal moves / checking                 ----------;;
+;;-------------                    Legal moves                       ----------;;
 ;;-----------------------------------------------------------------------------;;
 
-(defn get-legal-moves [fen]
+(defn- get-legal-moves [fen]
   (let [board (Board.)]
     (.loadFromFen board fen)
     (->> (MoveGenerator/generateLegalMoves board)
-         (map (partial object-to-san fen)))))
+         (map (fn [^com.github.bhlangonijr.chesslib.move.Move m]
+                [(str (.getFrom m))
+                 (str (.getTo m))])))))
 
-(defn legal-move? [fen san]
-  (contains? (set (get-legal-move-sans fen)) san))
+(defn legal-move? [fen from-square to-square]
+  (contains? (->> (get-legal-moves fen)
+                  (into #{}))
+             [(string/upper-case from-square)
+              (string/upper-case to-square)]))

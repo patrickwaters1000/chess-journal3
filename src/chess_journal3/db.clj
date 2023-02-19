@@ -155,7 +155,7 @@ ON CONFLICT DO NOTHING;
 
 (defn insert-moves! [db moves]
   (->> moves
-       (mapcat (juxt move/from-fen move/to-fen))
+       (mapcat (juxt move/initial-fen move/final-fen))
        (into #{})
        (insert-positions! db))
   (let [template "
@@ -195,7 +195,7 @@ ON CONFLICT DO NOTHING;
 (defn insert-tagged-moves! [db moves]
   {:pre [(every? move/tag moves)
          (every? move/san moves)
-         (every? move/from-fen)]}
+         (every? move/initial-fen moves)]}
   (insert-moves! db moves)
   (let [template "
 WITH v(tag, initial_fen, san) AS (
@@ -215,7 +215,7 @@ ON CONFLICT DO NOTHING;
         values (->> moves
                     (map (fn [m]
                            (format "('%s', '%s', '%s')"
-                                   (move/tag m) (move/from-fen m) (move/san m))))
+                                   (move/tag m) (move/initial-fen m) (move/san m))))
                     (string/join ",\n    "))
         query (format template values)]
     (jdbc/execute! db query)))
@@ -414,15 +414,6 @@ WHERE e.position_id = p.id
         sql (format template fen)]
     (jdbc/execute! db sql)))
 
-(defn hyphenate [k]
-  (keyword (string/replace (name k) "_" "-")))
-
-(defn hyphenate-keys [m]
-  (reduce-kv (fn [acc k v]
-               (assoc acc (hyphenate k) v))
-             {}
-             m))
-
 (defn get-child-tags [db tag]
   (let [template "
 SELECT child.name AS tag
@@ -463,7 +454,8 @@ WHERE t.name IN (%s)
                    (string/join ", "))
         query (format template param)]
     (->> (jdbc/query db query)
-         (map move/new))))
+         (map (fn [{:keys [tag san from]}]
+                (move/new-from-san tag from san))))))
 
 (comment
   ;; Other arity of `get-tagged-moves` not used
@@ -482,7 +474,7 @@ WHERE t.name = '%s'
   AND p1.fen = '%s';
 "
          query (format template tag fen)]
-     (map hyphenate-keys
+     (map u/hyphenate-keys
           (jdbc/query db query)))))
 
 (defn get-games [db]
@@ -538,10 +530,10 @@ UPDATE tagged_moves
 SET tag_id = input.new_tag_id
 FROM input
 WHERE tagged_moves.id = input.tagged_move_id;"
-        values (->> data
+        values (->> moves
                     (map (fn [m]
                            (format "('%s', '%s', '%s', '%s')"
-                                   (move/tag m) new-tag (move/from-fen m) (move/san m))))
+                                   (move/tag m) new-tag (move/initial-fen m) (move/san m))))
                     (string/join ",\n    "))
         query (format template values)]
     (jdbc/execute! db query)))

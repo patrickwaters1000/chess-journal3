@@ -8,7 +8,8 @@
 
 ;; There will be one more fen than san.
 (defrecord Line
-  [fens
+  [tag
+   fens
    sans
    idx])
 
@@ -35,9 +36,9 @@
 
 (defn append [^Line l ^Move m]
   {:pre [(= (final-fen l)
-            (move/from m))]}
+            (move/initial-fen m))]}
   (-> l
-      (update :fens conj (move/to m))
+      (update :fens conj (move/final-fen m))
       (update :sans conj (move/san m))))
 
 (defn drop-last-move [^Line l]
@@ -47,20 +48,22 @@
       (update :sans (comp vec drop-last))
       (update :idx #(min % (dec (length l))))))
 
-(defn stub [fen]
-  (map->Line {:fens [fen]
+(defn new-stub [tag fen]
+  (map->Line {:tag tag
+              :fens [fen]
               :sans []
               :idx 0}))
 
 (defn to-moves [^Line l]
-  (map (fn [[from to] san]
-         (move/new {:from from :to to :san san}))
-       (partition 2 1 (:fens l))
+  (map (fn [fen san]
+         (move/new-from-san (:tag l) fen san))
+       (drop-last (:fens l))
        (:sans l)))
 
-(defn from-moves [moves]
+(defn new-from-moves [moves]
   (reduce append
-          (stub (move/from (first moves)))
+          (new-stub (move/tag (first moves))
+                    (move/initial-fen (first moves)))
           moves))
 
 (defn complete? [^Line l]
@@ -80,3 +83,9 @@
     (-> l
         (update :fens (comp vec #(take (inc idx) %)))
         (update :sans (comp vec #(take idx %))))))
+
+(defn apply-move [^Line l ^Move m]
+  (-> l
+      truncate-at-current-fen
+      (append m)
+      next-frame))

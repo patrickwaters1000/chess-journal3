@@ -13,6 +13,7 @@
 
 (defrecord OpeningsEditor
   [mode
+   reportoire
    ^Tree tree
    color
    selected-square
@@ -24,11 +25,10 @@
   (let [{:keys [db
                 color
                 promote-piece]} state
-        move-tag (review/get-move-tag color)
-        moves (db/get-tagged-moves db move-tag)
-        line (line/stub c/initial-fen)
-        tree (tree/new moves line)]
+        reportoire (review/get-default-reportoire color)
+        tree (review/load-tree db reportoire)]
     (-> {:mode "openings-editor"
+         :reportoire reportoire
          :color color
          :selected-square nil
          :promote-piece promote-piece
@@ -39,10 +39,10 @@
 (defn reload-tree [state]
   (let [{:keys [db
                 tree
-                color]} state
+                color
+                reportoire]} state
         line (tree/get-line tree)
-        move-tag (review/get-move-tag color)
-        moves (db/get-tagged-moves db move-tag)]
+        moves (db/get-tagged-moves db reportoire)]
     (assoc state :tree (tree/new moves line))))
 
 (defn move-conflicts-with-reportoire?
@@ -62,7 +62,7 @@
   'white-reportoire-2nd-choices'."
   [tree color line]
   (->> (line/to-moves line)
-       (filter #(= color (move/get-color %)))
+       (filter #(= color (move/get-active-color %)))
        (filter (partial move-conflicts-with-reportoire? tree))
        first))
 
@@ -77,7 +77,7 @@
                 conflicting-move
                   (format "Line conflicts at %s from %s"
                           (move/san conflicting-move)
-                          (move/from-fen conflicting-move)))]
+                          (move/initial-fen conflicting-move)))]
     (if error
       (assoc state :error error)
       (do (db/insert-tagged-moves! db (line/to-moves line))
@@ -87,11 +87,11 @@
   (if-not (-> state :tree tree/get-fen fen/players-move?)
     (assoc state :error "Can only delete subtree when it's your move.")
     (let [{:keys [db tree color]} state
-          new-tag (case (review/get-moves-tag color)
+          new-tag (case (review/get-move-tag color)
                     "white-reportoire" "deleted-white-reportoire"
                     "black-reportoire" "deleted-black-reportoire")]
       (->> (tree/get-lines-from-current-fen tree)
-           (mapcat line/get-moves)
+           (mapcat line/to-moves)
            (into #{})
            (db/update-move-tags! db new-tag))
       (-> state
@@ -101,24 +101,28 @@
 (defn click-square [state square]
   (let [{:keys [selected-square
                 color
-                tree]} state
+                tree
+                promote-piece
+                tag]} state
         fen (tree/get-fen tree)
-        san (chess/move-to-san*)]
+        move (when selected-square
+               (move/new-from-squares tag
+                                      fen
+                                      selected-square
+                                      square
+                                      promote-piece))]
     (cond
       (and (not= selected-square square)
            (fen/active-player-has-piece-on-square? fen color square))
         (assoc state :selected-square square)
       (= selected-square square)
         (assoc state :selected-square nil)
-      (and selected-square
-           (chess/legal-move?-san fen san))
-        (u/try-move state square)
+      move
+        (update state :tree tree/apply-move move)
       :else
         state)))
 
 (defn switch-color [state]
   (-> state
       (update :color u/other-color)
-      lines/load-fen->moves
-      lines/load-lines
-      u/reset-board))
+      init))

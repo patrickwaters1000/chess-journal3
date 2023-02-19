@@ -10,20 +10,6 @@
     [chess-journal3.modes.setup :as setup]
     [chess-journal3.utils :as u]))
 
-;; TODO Add stuff to this function and check whether the state is invalid before
-;; responding.
-(defn invalid-state?
-  "If the state is valid, returns nil. Otherwise returns a list of reasons the
-  state is invalid."
-  [state]
-  (let [{:keys [color]} state]
-    (remove nil?
-            [(when-not (contains? #{"w" "b"} color)
-               (format "Invalid color: %s." color))])))
-
-;; TODO Distinguish between the condition that the opponent must move, and that
-;; the client needs to request an opponent move.
-
 (defn next-frame [state]
   (if (= "games" (:mode state))
     (games/next-frame state)
