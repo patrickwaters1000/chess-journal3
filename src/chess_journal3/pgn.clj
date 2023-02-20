@@ -42,7 +42,7 @@
 
 (defn sans-to-moves [sans]
   (first (reduce (fn [[moves fen] san]
-                   (let [new-fen (chess/apply-move-san fen san)
+                   (let [new-fen (chess/apply-san fen san)
                          move {:initial-fen fen
                                :final-fen new-fen
                                :san san}]

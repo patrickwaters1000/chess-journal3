@@ -47,7 +47,7 @@
         move (nth (get fen->moves fen) idx)]
     (update t :line line/append move)))
 
-(defn- up [^Tree t]
+(defn up [^Tree t]
   (update t :line line/drop-last-move))
 
 (defn- right [^Tree t]
@@ -130,6 +130,12 @@
 (defn next-frame [^Tree t]
   (update t :line line/next-frame))
 
+(defn prev-frame [^Tree t]
+  (update t :line line/prev-frame))
+
+(defn jump-to-final-frame [^Tree t]
+  (update t :line line/jump-to-final-frame))
+
 (defn get-moves
   ([^Tree t]
    (get-moves t (get-fen t)))
@@ -158,3 +164,23 @@
 
 (defn apply-move [^Tree t ^Move m]
   (update t :line line/apply-move m))
+
+(defn get-alternative-moves [^Tree t]
+  (let [{:keys [fen->num-lines]} t]
+    (map (fn [m]
+           {:san (move/san m)
+            :lines (-> m move/final-fen fen->num-lines)})
+         (get-moves t))))
+
+(defn locked? [^Tree t]
+  (not= (:initial-fen t)
+        (:base-fen t)))
+
+(defn switch-lock [^Tree t]
+  (let [base-fen (if (locked? t)
+                   (:initial-fen t)
+                   (get-fen t))]
+    (assoc t :base-fen base-fen)))
+
+(defn jump-to-initial-frame [^Tree t]
+  (update t :line line/jump-to-initial-frame))

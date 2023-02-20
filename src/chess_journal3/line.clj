@@ -13,26 +13,28 @@
    sans
    idx])
 
+(defn get-fens [l] (:fens l))
+(defn get-sans [l] (:sans l))
+(defn get-idx [l] (:idx l))
+
 (defn length [^Line l]
   (count (:sans l)))
-
-(defn fens [l] (:fens l))
 
 (defn fen
   ([^Line l]
    (fen l (:idx l)))
   ([^Line l idx]
-   (nth (fens l) idx)))
+   (nth (get-fens l) idx)))
 
 (defn initial-fen [^Line l]
-  (first (fens l)))
+  (first (get-fens l)))
 
 (defn final-fen [^Line l]
-  (last (fens l)))
+  (last (get-fens l)))
 
 (defn penultimate-fen [^Line l]
   {:pre [(pos? (length l))]}
-  (last (drop-last (fens l))))
+  (last (drop-last (get-fens l))))
 
 (defn append [^Line l ^Move m]
   {:pre [(= (final-fen l)
@@ -71,9 +73,14 @@
      (length l)))
 
 (defn next-frame [^Line l]
-  {:pre [(< (inc (:idx l))
-            (length l))]}
-  (update l :idx inc))
+  (if-not (complete? l)
+    (update l :idx inc)
+    l))
+
+(defn prev-frame [^Line l]
+  (if (pos? (:idx l))
+    (update l :idx dec)
+    l))
 
 (defn ends-with-opponent-to-play? [^Line l color]
   (not= color (-> l final-fen fen/get-active-color)))
@@ -89,3 +96,9 @@
       truncate-at-current-fen
       (append m)
       next-frame))
+
+(defn jump-to-final-frame [^Line l]
+  (assoc l :idx (dec (length l))))
+
+(defn jump-to-initial-frame [^Line l]
+  (assoc l :idx 0))

@@ -145,12 +145,13 @@ class Page extends React.Component {
             buttons = [
                 Button({ name: "set-mode", body: "setup", text: "Setup position" }),
                 Button({ name: "set-mode", body: "endgames", text: "Endgames" }),
-                Button({ name: "set-mode", body: "review", text: "Review" }),
+                Button({ name: "set-mode", body: "openings-review", text: "Openings review" }),
+                Button({ name: "set-mode", body: "openings-editor", text: "Openings editor" }),
                 Button({ name: "set-mode", body: "battle", text: "Battle" }),
                 Button({ name: "set-mode", body: "games", text: "Games" }),
                 Button({ name: "set-mode", body: "live-games", text: "Saved games" }),
             ];
-        } else if (mode == "edit") {
+        } else if (mode == "openings-editor") {
             buttons = [
                 Button({ name: "set-mode", body: "menu", text: "Exit" }),
                 Button({ name: "switch-color", text: "Switch color" }),
@@ -159,7 +160,7 @@ class Page extends React.Component {
                 Button({ name: "add-line", text: "Add line" }),
                 Button({ name: "delete-subtree", text: "Delete subtree", confirm: true }),
             ];
-        } else if (mode == "review") {
+        } else if (mode == "openings-review") {
             buttons = [
                 Button({ name: "set-mode", body: "menu", text: "Exit" }),
                 Button({ name: "switch-color", text: "Switch color" }),

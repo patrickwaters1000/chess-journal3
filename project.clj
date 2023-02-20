@@ -6,6 +6,8 @@
   :dependencies [[org.clojure/clojure "1.10.0"]
                  [org.clojure/core.async "1.5.648"]
                  [cheshire "5.10.0"]
+                 [jakarta.xml.bind/jakarta.xml.bind-api "2.3.2"] ;; Apparently required for http-kit
+                 [org.glassfish.jaxb/jaxb-runtime "2.3.2"] ;; Apparently required for http-kit
                  [compojure "1.1.8"]
                  [org.postgresql/postgresql "42.2.10"]
                  [http-kit "2.1.16"]

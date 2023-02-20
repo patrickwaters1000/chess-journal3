@@ -6,10 +6,15 @@
     [chess-journal3.line :as line]
     [chess-journal3.modes.openings.review :as review]
     [chess-journal3.move :as move]
+    [chess-journal3.pgn :as pgn]
     [chess-journal3.tree :as tree]
     [chess-journal3.utils :as u])
   (:import
-    (chess_journal3.tree Tree)))
+    (chess_journal3.tree Tree)
+    (chess_journal3.utils IState)))
+
+(declare switch-color
+         click-square)
 
 (defrecord OpeningsEditor
   [mode
@@ -19,7 +24,30 @@
    selected-square
    promote-piece
    error
-   db])
+   db]
+  IState
+  (getMode [_] "openings-editor")
+  (getFen [_] (tree/get-fen tree))
+  (nextFrame [state] (update state :tree tree/next-frame))
+  (prevFrame [state] (update state :tree tree/prev-frame))
+  (switchColor [state] (switch-color state))
+  (clickSquare [state square] (click-square state square))
+  (cleanUp [state] (dissoc state :error))
+  (makeClientView [state]
+    (let [line (tree/get-line tree)
+          sans (line/get-sans line)
+          fen (tree/get-fen tree)]
+      {:mode (.getMode state)
+       :fen fen
+       :sans sans
+       :idx (line/get-idx line)
+       :isLocked (tree/locked? tree)
+       :selectedSquare selected-square
+       :alternativeMoves (tree/get-alternative-moves tree)
+       :pgn (pgn/sans->pgn sans)
+       :playerColor color
+       :activeColor (fen/get-active-color fen)
+       :promotePiece promote-piece})))
 
 (defn init [state]
   (let [{:keys [db
@@ -87,7 +115,7 @@
   (if-not (-> state :tree tree/get-fen fen/players-move?)
     (assoc state :error "Can only delete subtree when it's your move.")
     (let [{:keys [db tree color]} state
-          new-tag (case (review/get-move-tag color)
+          new-tag (case (review/get-default-reportoire color)
                     "white-reportoire" "deleted-white-reportoire"
                     "black-reportoire" "deleted-black-reportoire")]
       (->> (tree/get-lines-from-current-fen tree)
@@ -126,3 +154,16 @@
   (-> state
       (update :color u/other-color)
       init))
+
+(defn alternative-move [state san]
+  (let [t1 (-> (:tree state)
+               tree/jump-to-final-frame)
+        m (->> (tree/get-moves t1)
+               (filter #(= san (move/san %)))
+               u/get-unique)
+        t2 (tree/apply-move t1 m)]
+    (assoc state :tree t2)))
+
+(defn switch-lock [state] (update state :tree tree/switch-lock))
+(defn reset-board [state] (update state :tree tree/jump-to-initial-frame))
+(defn undo-last-move [state] (update state :tree tree/up))

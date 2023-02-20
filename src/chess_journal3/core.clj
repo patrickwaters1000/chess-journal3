@@ -1,50 +1,18 @@
 (ns chess-journal3.core
   (:require
     [chess-journal3.db :as db]
-    [chess-journal3.engine :as engine]
-    [chess-journal3.lines :as lines]
-    [chess-journal3.modes.battle :as battle]
-    [chess-journal3.modes.edit :as edit]
-    [chess-journal3.modes.games :as games]
-    [chess-journal3.modes.review :as review]
-    [chess-journal3.modes.setup :as setup]
+    ;;[chess-journal3.engine :as engine]
+    ;;[chess-journal3.modes.battle :as battle]
+    [chess-journal3.modes.openings.editor :as openings-editor]
+    ;;[chess-journal3.modes.games :as games]
+    [chess-journal3.modes.openings.review :as openings-review]
+    ;;[chess-journal3.modes.setup :as setup]
     [chess-journal3.utils :as u]))
-
-(defn next-frame [state]
-  (if (= "games" (:mode state))
-    (games/next-frame state)
-    (u/next-frame state)))
-
-(defn next-line [state]
-  (case (:mode state)
-    "games" (games/next-line state)
-    "review" (review/next-line state)))
 
 (defn reset-board [state]
   (cond-> state
     true u/reset-board
     (= "review" (:mode state)) review/set-opponent-must-move))
-
-(defn switch-color [state]
-  (let [f (case (:mode state)
-            ("edit"
-             "setup") edit/switch-color
-            "review" review/switch-color
-            ("battle"
-             "endgames"
-             "live-games") battle/switch-color)]
-    (f state)))
-
-(defn click-square [state square]
-  (let [f (case (:mode state)
-            "review" review/click-square
-            ("battle"
-             "endgames"
-             "live-games") battle/click-square
-            "edit" edit/click-square
-            "setup" setup/click-square
-            identity)]
-    (f state square)))
 
 (defn switch-lock [state]
   (let [{:keys [idx locked-idx]} state

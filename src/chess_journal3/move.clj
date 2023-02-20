@@ -36,7 +36,7 @@
           san (if promoting
                 (chess/get-san fen from-square to-square :promote promote-piece)
                 (chess/get-san fen from-square to-square))]
-      (from-san tag fen san))))
+      (new-from-san tag fen san))))
 
 ;; Ignores tags
 (defn equals [m1 m2]
