@@ -47,7 +47,7 @@
 
 (defn pprint-state [state]
   (println "State:")
-  (->> @state
+  (->> state
        (map (fn [[k v]]
               (let [v-str (str v)
                     v-str (if (> (count v-str) 1000)

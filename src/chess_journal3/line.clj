@@ -2,7 +2,8 @@
   (:require
     [chess-journal3.constants :as c]
     [chess-journal3.fen :as fen]
-    [chess-journal3.move :as move])
+    [chess-journal3.move :as move]
+    [chess-journal3.utils :as u])
   (:import
     (chess_journal3.move Move)))
 
@@ -69,7 +70,7 @@
           moves))
 
 (defn complete? [^Line l]
-  (= (inc (:idx l))
+  (= (:idx l)
      (length l)))
 
 (defn next-frame [^Line l]
@@ -97,8 +98,18 @@
       (append m)
       next-frame))
 
+(defn jump-to-frame [^Line l idx]
+  {:pre [(pos? idx)
+         (< idx (length l))]}
+  (assoc l :idx idx))
+
 (defn jump-to-final-frame [^Line l]
   (assoc l :idx (dec (length l))))
 
 (defn jump-to-initial-frame [^Line l]
   (assoc l :idx 0))
+
+(defn jump-to-fen [^Line l fen]
+  (let [idx (u/index-of-first #(= fen %) (get-fens l))]
+    (assert (some? idx))
+    (assoc l :idx idx)))

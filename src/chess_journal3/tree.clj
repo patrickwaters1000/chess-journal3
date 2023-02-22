@@ -40,15 +40,23 @@
         idx (u/index-of-first #(= current-fen (move/final-fen %)) moves)]
     (< (inc idx) (count moves))))
 
-(defn- down [^Tree t idx]
+(defn- down [^Tree t child-idx]
   (let [{:keys [line
                 fen->moves]} t
         fen (line/final-fen line)
-        move (nth (get fen->moves fen) idx)]
-    (update t :line line/append move)))
+        move (nth (get fen->moves fen) child-idx)
+        frame-idx (inc (line/get-idx line))]
+    (-> t
+        (update :line line/append move)
+        ;;(update :line line/jump-to-frame frame-idx)
+        )))
 
 (defn up [^Tree t]
-  (update t :line line/drop-last-move))
+  (let [idx (dec (line/get-idx (:line t)))]
+    (-> t
+        (update :line line/drop-last-move)
+        ;;(update :line line/jump-to-frame idx)
+        )))
 
 (defn- right [^Tree t]
   (let [{:keys [line
@@ -56,19 +64,22 @@
         previous-fen (line/penultimate-fen line)
         current-fen (line/final-fen line)
         moves (get fen->moves previous-fen)
-        current-idx (u/index-of-first #(= current-fen (move/final-fen %)) moves)
-        idx (mod (inc current-idx)
-                 (count moves))]
-    (-> t up (down idx))))
+        current-child-idx (u/index-of-first #(= current-fen (move/final-fen %))
+                                            moves)
+        child-idx (mod (inc current-child-idx)
+                       (count moves))
+        frame-idx (line/get-idx line)]
+    (-> t
+        up
+        (down child-idx)
+        ;;(update :line line/jump-to-frame frame-idx)
+        )))
 
-(defn- complete-line [^Tree t]
+(defn complete-line [^Tree t]
   (if-not (can-go-down? t)
     t
     (recur (down t 0))))
 
-;; It looks strange to go right when you "can not go right". In this case we
-;; have reached the base fen, which can only happen if we are on the last
-;; line. Forcing a rightward move returns to the first line.
 (defn next-line [^Tree t]
   (cond
     (not (can-go-up? t))
@@ -77,6 +88,14 @@
       (-> t right complete-line)
     :else
       (recur (up t))))
+
+(comment
+  ;; Errs on transpositions
+  (when (and (not visited-fen)
+             (some visited? child-fens))
+    (throw (Exception. "Cycle detected")))
+  ;;
+  )
 
 (defn- count-lines [fen->moves initial-fen]
   (let [fen->num-lines (atom {})
@@ -95,9 +114,6 @@
                           1)
               visited? #(contains? @visited-fens %)
               visited-fen (visited? fen)]
-          (when (and (not visited-fen)
-                     (some visited? child-fens))
-            (throw (Exception. "Cycle detected")))
           (if visited-fen
             (swap! fen->num-lines assoc fen num-lines)
             (swap! visited-fens conj fen))
@@ -184,3 +200,12 @@
 
 (defn jump-to-initial-frame [^Tree t]
   (update t :line line/jump-to-initial-frame))
+
+(defn jump-to-base-frame [^Tree t]
+  (update t :line line/jump-to-fen (:base-fen t)))
+
+(defn get-idx [^Tree t]
+  (line/get-idx (:line t)))
+
+(defn jump-to-frame [^Tree t idx]
+  (update t :line line/jump-to-frame idx))

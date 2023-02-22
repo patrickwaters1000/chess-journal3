@@ -58,8 +58,8 @@
 
 ;; TODO Handle invalid inputs.
 (defn get-san
-  [fen from-square to-square & {:keys [promote]}]
-  (->> (move-to-object from-square to-square promote)
+  [fen from-square to-square & {:keys [promote-piece]}]
+  (->> (move-to-object from-square to-square promote-piece)
        (object-to-san fen)))
 
 ;;-----------------------------------------------------------------------------;;

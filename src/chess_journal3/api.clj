@@ -34,16 +34,12 @@
 ;;     a. [DONE] Regenerate review lines after delete.
 ;;     b. Ensure that current fen is with player to move.
 ;; 16. Show sans with current last san highlighted
-;; 17. Undo move doesn't work correctly in review mode (disable it there?)
 ;; 18. Add explain move feature
-;; 20. Right in review mode causes idx oob error
 ;; 21. Move number in alternative moves buttons
-;; 22. Having alternative moves work differently in edit mode is too confusing
 ;; 23. Instead of `opponentMustMove`, a `pendingMoveId`
 ;; 25. Add opponent lines to endgames mode
 ;; 28. Init functions for various modes are not complete. E.g., reset board to
 ;;     initial fen when starting review mode.
-;; 30. Add "force move" to endgames -- prompt the user for a different computer move.
 ;; 31. Each mode should have an exit function to clean up the app state when
 ;;     leaving the mode.
 
@@ -64,10 +60,10 @@
   (POST "/start" _ (route menu/init))
   (POST "/click-square" {body :body}
     (let [square (json/parse-string (slurp body))]
-      (route #(.clickSquare %) square)))
+      (route #(.clickSquare %1 %2) square)))
   (POST "/alternative-move" {body :body}
     (let [san (json/parse-string (slurp body))
-          f (case #(.getMode @state)
+          f (case (.getMode @state)
               "openings-review" openings-review/alternative-move
               "openings-editor" openings-editor/alternative-move)]
       (route f san)))
@@ -133,7 +129,7 @@
          "Backspace") (case (.getMode @state)
                         "openings-editor" (route openings-editor/undo-last-move))
         ;; ("p" "n" "b" "r" "q" "k" "P" "N" "B" "R" "Q" "K") (do (println (str "Key = " keycode)) (route "Set selected piece" setup/set-selected-piece keycode))
-        "l" (do (u/pprint-state)
+        "l" (do (u/pprint-state @state)
                 (route identity))
         (println (format "Unexpected keyboard event %s" keycode))))))
 
@@ -145,9 +141,34 @@
               {:port 3000}))
 
 (comment
-  (def s1 initial-state)
-  (def s2 (review/init s1))
-  (def s3 (core/click-square s2 "E2"))
-  (def s4 (core/click-square s2 "E4"))
+  (do (def s1 @state)
+      (def s2 (openings-review/init s1))
+      (def s3 (openings-review/click-square s2 "E2"))
+      (def s4 (openings-review/click-square s3 "E4"))
+      (def s5 (openings-review/opponent-move s4))
+      (def s6 (openings-review/click-square s5 "G1"))
+      (def s7 (openings-review/click-square s6 "F3"))
+      (def s8 (openings-review/opponent-move s7))
+      (def s9 (openings-review/click-square s8 "D2"))
+      (def s10 (openings-review/click-square s9 "D4"))
+      (def s11 (openings-review/opponent-move s10))
+      (def s12 (openings-review/click-square s11 "F1"))
+      (def s13 (openings-review/click-square s12 "C4")))
+  (require '[chess-journal3.fen :as fen])
+  (let [{:keys [tree
+                color]} s12
+        fen (tree/get-fen tree)]
+    (fen/players-move? fen color))
+  (openings-review/move-to-square-is-correct? s12 "C4")
+
+  (def s6 (openings-review/next-line s5))
+
+  (def s6 (openings-review/alternative-move s5 "c6"))
+  (require '[chess-journal3.tree :as tree])
+  (def t (:tree s6))
+  (#'tree/can-go-down? t)
+  ()
+  (tree/get-moves (:tree s6) "rnbqkbnr/pp1ppppp/2p5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2")
+  "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
   ;;
   )

@@ -36,6 +36,7 @@
   (makeClientView [state]
     (let [line (tree/get-line tree)
           sans (line/get-sans line)
+          visible-sans (-> line line/truncate-at-current-fen line/get-sans)
           fen (tree/get-fen tree)]
       {:mode (.getMode state)
        :fen fen
@@ -45,7 +46,7 @@
        :selectedSquare selected-square
        :opponentMustMove opponent-must-move
        :alternativeMoves (get-alternative-moves tree)
-       :pgn (pgn/sans->pgn sans)
+       :pgn (pgn/sans->pgn visible-sans)
        :playerColor color
        :activeColor (fen/get-active-color fen)
        :promotePiece promote-piece})))
@@ -68,7 +69,7 @@
 
 (defn load-tree [db reportoire]
   (let [moves (db/get-tagged-moves db reportoire)
-        line (line/new-stub c/initial-fen)]
+        line (line/new-stub reportoire c/initial-fen)]
     (tree/new moves line)))
 
 (defn init [state]
@@ -92,6 +93,7 @@
 (defn move [state]
   (-> state
       (update :tree tree/next-frame)
+      (assoc :selected-square nil)
       set-opponent-must-move))
 
 (defn opponent-move [state]
@@ -104,7 +106,7 @@
                 selected-square
                 promote-piece]} state
         fen (-> state :tree tree/get-fen)
-        san (chess/get-san fen selected-square square promote-piece)
+        san (chess/get-san fen selected-square square :promote-piece promote-piece)
         correct-san (-> tree tree/get-sans u/get-unique)]
     (= correct-san san)))
 
@@ -140,16 +142,25 @@
   (-> t tree/prev-frame tree/get-alternative-moves))
 
 (defn alternative-move [state san]
-  (let [t1 (-> (:tree state)
-               tree/jump-to-final-frame
+  (let [frame-idx (tree/get-idx (:tree state))
+        t1 (-> (:tree state)
+               tree/truncate-line-at-current-fen
                tree/up)
         m (->> (tree/get-moves t1)
                (filter #(= san (move/san %)))
                u/get-unique)
-        t2 (tree/apply-move t1 m)]
-    (assoc state :tree t2)))
+        t2 (-> t1
+               (tree/apply-move m)
+               tree/complete-line)]
+    (-> state
+        (assoc :tree t2)
+        (update :tree tree/jump-to-frame frame-idx))))
 
-(defn next-line [state] (update state :tree next-line))
+(defn next-line [state]
+  (-> state
+      (update :tree tree/next-line)
+      (update :tree tree/jump-to-base-frame)))
+
 (defn switch-lock [state] (update state :tree tree/switch-lock))
 
 (defn reset-board [state]

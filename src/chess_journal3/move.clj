@@ -34,7 +34,7 @@
           promoting (or (and (= "p" piece) (= 1 to-rank))
                         (and (= "P" piece) (= 8 to-rank)))
           san (if promoting
-                (chess/get-san fen from-square to-square :promote promote-piece)
+                (chess/get-san fen from-square to-square :promote-piece promote-piece)
                 (chess/get-san fen from-square to-square))]
       (new-from-san tag fen san))))
 
