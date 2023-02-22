@@ -52,49 +52,21 @@
     (swap! state #(.cleanUp %))
     resp))
 
-(defroutes openings-review-routes
-  (POST "/alternative-move" {body :body}
-    (let [san (json/parse-string (slurp body))]
-      (route openings-review/alternative-move san)))
-  (POST "/switch-lock" _ (route openings-review/switch-lock))
-  (POST "/opponent-move" _ (route openings-review/opponent-move))
-  (POST "/key" {body :body}
-    (let [keycode (json/parse-string (slurp body))]
-      (case keycode
-        "ArrowLeft" (route #(.prevFrame %))
-        "ArrowRight" (route #(.nextFrame %))
-        "Enter" (case (.getMode @state)
-                  "openings-review" (route openings-review/next-line))
-        (println (format "Unexpected keyboard event %s" keycode))))))
-
-(defroutes openings-editor-routes
-  (POST "/alternative-move" {body :body}
-    (let [san (json/parse-string (slurp body))]
-      (route openings-editor/alternative-move san)))
-  (POST "/switch-lock" _ (route openings-editor/switch-lock))
-  (POST "/reset" _ (route openings-editor/reset-board))
-  (POST "/add-line" _ (route openings-editor/add-line!))
-  (POST "/delete-subtree" _ (route openings-editor/delete-subtree!))
-  (POST "/key" {body :body}
-    (let [keycode (json/parse-string (slurp body))]
-      (case keycode
-        "ArrowLeft" (route #(.prevFrame %))
-        "ArrowRight" (route #(.nextFrame %))
-        ("Delete"
-         "Backspace") (route openings-editor/undo-last-move)
-        (println (format "Unexpected keyboard event %s" keycode))))))
-
 ;; TODO Client should prefix requests with the current mode. Split this up into
 ;; simpler APIs in each mode namespace.
 (defroutes app
   (GET "/" [] (slurp "front/dist/index.html"))
   (GET "/main.js" [] (slurp "front/dist/main.js"))
   (POST "/start" _ (route menu/init))
-  (context "/openings-review" [req] openings-review-routes)
-  (context "/openings-editor" [req] openings-editor-routes)
   (POST "/click-square" {body :body}
     (let [square (json/parse-string (slurp body))]
       (route #(.clickSquare %1 %2) square)))
+  (POST "/alternative-move" {body :body}
+    (let [san (json/parse-string (slurp body))
+          f (case (.getMode @state)
+              "openings-review" openings-review/alternative-move
+              "openings-editor" openings-editor/alternative-move)]
+      (route f san)))
   (POST "/set-mode" {body :body}
     (let [mode (json/parse-string (slurp body))
           f (case mode
@@ -110,8 +82,27 @@
       (route f)))
   ;;(POST "/select-game" {body :body} (let [game-tag (json/parse-string (slurp body))] (route "Select game" games/select-game game-tag)))
   ;;(POST "/set-elo" {body :body} (let [elo (Integer/parseInt (json/parse-string (slurp body)))] (route "Set Elo" core/set-elo elo)))
+  (POST "/switch-lock" _
+    (case (.getMode @state)
+      "openings-review" (route openings-review/switch-lock)
+      "openings-editor" (route openings-editor/switch-lock)))
   (POST "/switch-color" _ (route #(.switchColor %)))
-
+  (POST "/reset" _
+    (case (.getMode @state)
+      "openings-editor" (route openings-editor/reset-board)
+      "openings-review" (route openings-review/reset-board)))
+  (POST "/add-line" _
+    (case (.getMode @state)
+      "openings-editor" (route openings-editor/add-line!)))
+  (POST "/give-up" _
+    (case (.getMode @state)
+      "openings-review" (route openings-review/give-up)))
+  (POST "/opponent-move" _
+    (case (.getMode @state)
+      "openings-review" (route openings-review/opponent-move)))
+  (POST "/delete-subtree" _
+    (case (.getMode @state)
+      "openings-editor" (route openings-editor/delete-subtree!)))
   ;;(POST "/reboot-engine" _ (route "Reboot engine" core/reboot-engine!))
   (POST "/cycle-promote-piece" _ (route u/cycle-promote-piece))
   ;;(POST "/switch-active-color" _ (route "Switch active color" setup/switch-active-color))
@@ -132,6 +123,11 @@
       (case keycode
         "ArrowLeft" (route #(.prevFrame %))
         "ArrowRight" (route #(.nextFrame %))
+        "Enter" (case (.getMode @state)
+                  "openings-review" (route openings-review/next-line))
+        ("Delete"
+         "Backspace") (case (.getMode @state)
+                        "openings-editor" (route openings-editor/undo-last-move))
         ;; ("p" "n" "b" "r" "q" "k" "P" "N" "B" "R" "Q" "K") (do (println (str "Key = " keycode)) (route "Set selected piece" setup/set-selected-piece keycode))
         "l" (do (u/pprint-state @state)
                 (route identity))
