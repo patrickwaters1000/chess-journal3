@@ -30,18 +30,15 @@
 ;; > lein run -m chess-journal3.api
 ;;
 ;; TODO
-;; 13. Support deleting subtree from review mode
-;;     a. [DONE] Regenerate review lines after delete.
-;;     b. Ensure that current fen is with player to move.
 ;; 16. Show sans with current last san highlighted
 ;; 18. Add explain move feature
 ;; 21. Move number in alternative moves buttons
 ;; 23. Instead of `opponentMustMove`, a `pendingMoveId`
 ;; 25. Add opponent lines to endgames mode
-;; 28. Init functions for various modes are not complete. E.g., reset board to
-;;     initial fen when starting review mode.
-;; 31. Each mode should have an exit function to clean up the app state when
-;;     leaving the mode.
+;; 32. Alternative move in review mode tries to go up from the root of the tree.
+;; 33. Alternative move fails in openings editor.
+;; 34. Alternative move buttons persist after exiting to the main menu.
+;; 35. Moving pieces fails in review mode unless on a leaf reportoire.
 
 (def state (atom (menu/init {:color "w" :db db/db})))
 
@@ -53,12 +50,14 @@
     resp))
 
 (defroutes openings-review-routes
-  (POST "/alternative-move" {body :body}
+  (POST "/openings-review/next-reportoire" _ (route openings-review/next-reportoire))
+  (POST "/openings-review/alternative-move" {body :body}
     (let [san (json/parse-string (slurp body))]
+      (println san)
       (route openings-review/alternative-move san)))
-  (POST "/switch-lock" _ (route openings-review/switch-lock))
-  (POST "/opponent-move" _ (route openings-review/opponent-move))
-  (POST "/key" {body :body}
+  (POST "/openings-review/switch-lock" _ (route openings-review/switch-lock))
+  (POST "/openings-review/opponent-move" _ (route openings-review/opponent-move))
+  (POST "/openings-review/key" {body :body}
     (let [keycode (json/parse-string (slurp body))]
       (case keycode
         "ArrowLeft" (route #(.prevFrame %))
@@ -68,14 +67,16 @@
         (println (format "Unexpected keyboard event %s" keycode))))))
 
 (defroutes openings-editor-routes
-  (POST "/alternative-move" {body :body}
+  (POST "/openings-editor/next-reportoire" _ (route openings-editor/next-reportoire))
+  (POST "/openings-editor/alternative-move" {body :body}
     (let [san (json/parse-string (slurp body))]
+      (println san)
       (route openings-editor/alternative-move san)))
-  (POST "/switch-lock" _ (route openings-editor/switch-lock))
-  (POST "/reset" _ (route openings-editor/reset-board))
-  (POST "/add-line" _ (route openings-editor/add-line!))
-  (POST "/delete-subtree" _ (route openings-editor/delete-subtree!))
-  (POST "/key" {body :body}
+  (POST "/openings-editor/switch-lock" _ (route openings-editor/switch-lock))
+  (POST "/openings-editor/reset" _ (route openings-editor/reset-board))
+  (POST "/openings-editor/add-line" _ (route openings-editor/add-line!))
+  (POST "/openings-editor/delete-subtree" _ (route openings-editor/delete-subtree!))
+  (POST "/openings-editor/key" {body :body}
     (let [keycode (json/parse-string (slurp body))]
       (case keycode
         "ArrowLeft" (route #(.prevFrame %))
@@ -84,17 +85,15 @@
          "Backspace") (route openings-editor/undo-last-move)
         (println (format "Unexpected keyboard event %s" keycode))))))
 
-;; TODO Client should prefix requests with the current mode. Split this up into
-;; simpler APIs in each mode namespace.
-(defroutes app
+(defroutes common-routes
   (GET "/" [] (slurp "front/dist/index.html"))
   (GET "/main.js" [] (slurp "front/dist/main.js"))
   (POST "/start" _ (route menu/init))
-  (context "/openings-review" [req] openings-review-routes)
-  (context "/openings-editor" [req] openings-editor-routes)
   (POST "/click-square" {body :body}
     (let [square (json/parse-string (slurp body))]
-      (route #(.clickSquare %1 %2) square)))
+      (route #(.clickSquare % square))))
+  (POST "/switch-color" _ (route #(.switchColor %)))
+  (POST "/cycle-promote-piece" _ (route u/cycle-promote-piece))
   (POST "/set-mode" {body :body}
     (let [mode (json/parse-string (slurp body))
           f (case mode
@@ -107,44 +106,63 @@
               ;;"endgames" endgames/init
               ;;"live-games" live-games/init
               )]
-      (route f)))
-  ;;(POST "/select-game" {body :body} (let [game-tag (json/parse-string (slurp body))] (route "Select game" games/select-game game-tag)))
-  ;;(POST "/set-elo" {body :body} (let [elo (Integer/parseInt (json/parse-string (slurp body)))] (route "Set Elo" core/set-elo elo)))
-  (POST "/switch-color" _ (route #(.switchColor %)))
+      (println mode)
+      (route f))))
 
-  ;;(POST "/reboot-engine" _ (route "Reboot engine" core/reboot-engine!))
-  (POST "/cycle-promote-piece" _ (route u/cycle-promote-piece))
-  ;;(POST "/switch-active-color" _ (route "Switch active color" setup/switch-active-color))
-  ;;(POST "/save-endgame" _ (route "Save endgame" endgames/save))
-  ;;(POST "/delete-endgame" _ (route "Delete endgame" endgames/delete))
-  ;;(POST "/cycle-endgame-class" {body :body} (let [level (json/parse-string (slurp body)) msg (format "Cycle endgame class at level %s" level)] (println (dissoc @state :endgames)) (route msg endgames/cycle-class level)))
-  ;;(POST "/refine-endgame-class" _ (route "Refine endgame class" endgames/refine-class))
-  ;;(POST "/next-endgame" _ (route "Next endgame" endgames/next))
-  ;;(POST "/previous-endgame" _ (route "Previous endgame" endgames/previous))
-  ;;(POST "/toggle-evaluation" _ (route "Toggle evaluation" endgames/toggle-evaluation))
-  ;;(POST "/force-move" {body :body} (let [move (json/parse-string (slurp body))] (route "Force move" endgames/force-move move)))
-  ;;(POST "/new-live-game" {body :body} (let [game-name (json/parse-string (slurp body))] (route "New live game" live-games/new game-name)))
-  ;;(POST "/cycle-live-game" _ (route "Cycle live game" live-games/cycle-game))
-  ;;(POST "/save-live-game" _ (route "Save live game" live-games/save))
-  ;;(POST "/end-live-game" {body :body} (let [result (json/parse-string (slurp body))] (route "End live game" live-games/end result)))
-  (POST "/key" {body :body}
-    (let [keycode (json/parse-string (slurp body))]
-      (case keycode
-        "ArrowLeft" (route #(.prevFrame %))
-        "ArrowRight" (route #(.nextFrame %))
-        ;; ("p" "n" "b" "r" "q" "k" "P" "N" "B" "R" "Q" "K") (do (println (str "Key = " keycode)) (route "Set selected piece" setup/set-selected-piece keycode))
-        "l" (do (u/pprint-state @state)
-                (route identity))
-        (println (format "Unexpected keyboard event %s" keycode))))))
+;;(POST "/key" {body :body}
+;;      (let [keycode (json/parse-string (slurp body))]
+;;        (case keycode
+;;          "ArrowLeft" (route #(.prevFrame %))
+;;          "ArrowRight" (route #(.nextFrame %))
+;;          ;; ("p" "n" "b" "r" "q" "k" "P" "N" "B" "R" "Q" "K") (do (println (str "Key = " keycode)) (route "Set selected piece" setup/set-selected-piece keycode))
+;;          "l" (do (u/pprint-state @state)
+;;                  (route identity))
+;;          (println (format "Unexpected keyboard event %s" keycode)))))
+;;
+;;(POST "/select-game" {body :body} (let [game-tag (json/parse-string (slurp body))] (route "Select game" games/select-game game-tag)))
+;;(POST "/set-elo" {body :body} (let [elo (Integer/parseInt (json/parse-string (slurp body)))] (route "Set Elo" core/set-elo elo)))
+;;(POST "/reboot-engine" _ (route "Reboot engine" core/reboot-engine!))
+;;(POST "/switch-active-color" _ (route "Switch active color" setup/switch-active-color))
+;;(POST "/save-endgame" _ (route "Save endgame" endgames/save))
+;;(POST "/delete-endgame" _ (route "Delete endgame" endgames/delete))
+;;(POST "/cycle-endgame-class" {body :body} (let [level (json/parse-string (slurp body)) msg (format "Cycle endgame class at level %s" level)] (println (dissoc @state :endgames)) (route msg endgames/cycle-class level)))
+;;(POST "/refine-endgame-class" _ (route "Refine endgame class" endgames/refine-class))
+;;(POST "/next-endgame" _ (route "Next endgame" endgames/next))
+;;(POST "/previous-endgame" _ (route "Previous endgame" endgames/previous))
+;;(POST "/toggle-evaluation" _ (route "Toggle evaluation" endgames/toggle-evaluation))
+;;(POST "/force-move" {body :body} (let [move (json/parse-string (slurp body))] (route "Force move" endgames/force-move move)))
+;;(POST "/new-live-game" {body :body} (let [game-name (json/parse-string (slurp body))] (route "New live game" live-games/new game-name)))
+;;(POST "/cycle-live-game" _ (route "Cycle live game" live-games/cycle-game))
+;;(POST "/save-live-game" _ (route "Save live game" live-games/save))
+;;(POST "/end-live-game" {body :body} (let [result (json/parse-string (slurp body))] (route "End live game" live-games/end result)))
+
+;; TODO Client should prefix requests with the current mode. Split this up into
+;; simpler APIs in each mode namespace.
+(defroutes all-routes
+  openings-editor-routes
+  openings-review-routes
+  common-routes)
 
 ;; When calling a state function from a mode ns, should check that the current mode matches the ns.
 
+(defn wrap-print-url [handler]
+  (fn [request]
+    (println (:uri request))
+    (handler request)))
+
 (defn -main [& _]
   (println "Ready!")
-  (run-server (rmp/wrap-params app)
+  (run-server (-> all-routes
+                  rmp/wrap-params
+                  wrap-print-url)
               {:port 3000}))
 
 (comment
+  (do (def s1 @state)
+      (def s2 (openings-editor/init s1))
+      (def s3 (openings-editor/alternative-move s2 "d4"))
+      ;;
+      )
   (do (def s1 @state)
       (def s2 (openings-review/init s1))
       (def s3 (openings-review/click-square s2 "E2"))

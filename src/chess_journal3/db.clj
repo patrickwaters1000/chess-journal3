@@ -1,6 +1,6 @@
 (ns chess-journal3.db
   (:require
-    [chess-journal3.constants :refer [username]]
+    [chess-journal3.constants :refer [username initial-fen]]
     [chess-journal3.move :as move]
     [clj-time.core :as t]
     [clojure.java.jdbc :as jdbc]
@@ -171,9 +171,11 @@ FROM t
 ON CONFLICT DO NOTHING;
 "
         values (->> moves
-                    (map (fn [{:keys [initial-fen final-fen san]}]
+                    (map (fn [^Move m]
                            (format "('%s', '%s', '%s')"
-                                   initial-fen final-fen san)))
+                                   (move/initial-fen m)
+                                   (move/final-fen m)
+                                   (move/san m))))
                     (string/join ",\n    "))
         query (format template values)]
     (jdbc/execute! db query)))
@@ -191,7 +193,6 @@ ON CONFLICT DO NOTHING;
         query (format template values)]
     (jdbc/execute! db query)))
 
-;; Rows of `data` have keys tag, initial-fen, san, final-fen
 (defn insert-tagged-moves! [db moves]
   {:pre [(every? move/tag moves)
          (every? move/san moves)
@@ -538,6 +539,14 @@ WHERE tagged_moves.id = input.tagged_move_id;"
         query (format template values)]
     (jdbc/execute! db query)))
 
+(defn get-tag-containments [db]
+  (jdbc/query db "
+SELECT t1.name AS parent,
+       t2.name AS child
+FROM tag_containments c
+     LEFT JOIN tags t1 ON c.big_tag_id = t1.id
+     LEFT JOIN tags t2 ON c.small_tag_id = t2.id;"))
+
 (comment
   (defn reset! [db]
     (jdbc/execute! db "DROP TABLE IF EXISTS tagged_moves;")
@@ -558,6 +567,10 @@ WHERE tagged_moves.id = input.tagged_move_id;"
                       "black-reportoire"
                       "deleted-white-reportoire"
                       "deleted-black-reportoire"])
+    (insert-tags! db ["white-1d4"
+                      "white-1e4"])
+    (insert-tag-containment! db "white-1d4" "white-reportoire")
+    (insert-tag-containment! db "white-1e4" "white-reportoire")
     (insert-tags! db ["live-games"])
     (insert-tags! db ["white-games"
                       "black-games"]))
@@ -577,6 +590,31 @@ WHERE tagged_moves.id = input.tagged_move_id;"
     (insert-game!* db metadata)
     ;;[metadata moves tag containing-tag]
     )
+  ;;
+  )
+
+;;ERROR: null value in column "initial_position_id" of relation "moves"
+;;violates not-null constraint Detail: Failing row contains (23057, null, null,
+;;                                                                  d4).
+
+(comment
+  ;; 2023-02-26 Re-tag existing white reportoire as 'white-1e4'
+  (jdbc/query db "select * from tags where name in ('white-reportoire', 'white-1e4', 'white-1d4');")
+  (jdbc/execute! db "update tagged_moves set tag_id = 248 where tag_id = 1;")
+  ;; 2023-02-26 Add 1d4 in 'white-1d4' reportoire
+  (insert-tagged-moves! db [(move/new-from-san "white-1d4" initial-fen "d4")])
+  (jdbc/query db "
+WITH v(tag, initial_fen, san) AS (
+  VALUES
+    ('white-1d4', 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', 'd4')
+)
+SELECT t.id, m.id
+FROM v
+  LEFT JOIN tags t ON v.tag = t.name
+  LEFT JOIN positions p ON v.initial_fen = p.fen
+  LEFT JOIN moves m
+    ON p.id = m.initial_position_id
+    AND v.san = m.san;")
   ;;
   )
 

@@ -62,12 +62,13 @@ const Button = (props) => {
 const AlternativeMoveButton = (data) => {
     let { san,
           lines,
-          score } = data;
+          score,
+          mode } = data;
     let width = (score == null ? "50px" : "150px");
     return React.createElement(
         "button",
         {
-            onClick: () => event("alternative-move", san),
+            onClick: () => event(`${mode}/alternative-move`, san),
             style: {
 	        maxWidth: width,
 	        width: width
@@ -139,6 +140,7 @@ class Page extends React.Component {
               endgameClassButtonConfigs,
               liveGameName,
               endgameEvaluation,
+              openingReportoire,
             } = this.state;
         let buttons;
         if (mode == "menu") {
@@ -154,6 +156,7 @@ class Page extends React.Component {
         } else if (mode == "openings-editor") {
             buttons = [
                 Button({ name: "set-mode", body: "menu", text: "Exit" }),
+                Button({ name: "openings-editor/next-reportoire", text: openingReportoire, }),
                 Button({ name: "switch-color", text: "Switch color" }),
                 Button({ name: "openings-editor/switch-lock", text: (isLocked ? "Unlock" : "Lock") }),
                 Button({ name: "openings-editor/reset", text: "Reset" }),
@@ -163,6 +166,7 @@ class Page extends React.Component {
         } else if (mode == "openings-review") {
             buttons = [
                 Button({ name: "set-mode", body: "menu", text: "Exit" }),
+                Button({ name: "openings-review/next-reportoire", text: openingReportoire, }),
                 Button({ name: "switch-color", text: "Switch color" }),
                 Button({ name: "openings-review/switch-lock", text: (isLocked ? "Unlock" : "Lock") }),
             ];
@@ -223,7 +227,12 @@ class Page extends React.Component {
         } else {
             buttons = [];
         }
-        let alternativeMoveButtons = alternativeMoves.map(AlternativeMoveButton);
+        let alternativeMoveButtons = alternativeMoves.map(x => {
+            x.mode = mode;
+            return x
+        }).map(
+            AlternativeMoveButton
+        );
         let gameButtons = (games == null
                            ? []
                            : [React.createElement("p", {}, "Games:"),

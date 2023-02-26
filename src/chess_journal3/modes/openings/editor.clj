@@ -17,8 +17,7 @@
          click-square)
 
 (defrecord OpeningsEditor
-  [mode
-   reportoire
+  [reportoire
    ^Tree tree
    color
    selected-square
@@ -32,12 +31,13 @@
   (prevFrame [state] (update state :tree tree/prev-frame))
   (switchColor [state] (switch-color state))
   (clickSquare [state square] (click-square state square))
-  (cleanUp [state] (dissoc state :error))
+  (cleanUp [state] (assoc state :error nil))
   (makeClientView [state]
     (let [line (tree/get-line tree)
           sans (line/get-sans line)
           fen (tree/get-fen tree)]
       {:mode (.getMode state)
+       :openingReportoire reportoire
        :fen fen
        :sans sans
        :idx (line/get-idx line)
@@ -47,22 +47,39 @@
        :pgn (pgn/sans->pgn sans)
        :playerColor color
        :activeColor (fen/get-active-color fen)
+       :flipBoard (= "b" color)
        :promotePiece promote-piece})))
 
-(defn init [state]
-  (let [{:keys [db
-                color
-                promote-piece]} state
-        reportoire (review/get-default-reportoire color)
-        tree (review/load-tree db reportoire)]
-    (-> {:mode "openings-editor"
-         :reportoire reportoire
-         :color color
-         :selected-square nil
-         :promote-piece promote-piece
-         :db db
-         :error nil}
-        map->OpeningsEditor)))
+(defn subtree-leaves [relations root]
+  (let [parent-nodes (->> relations (map :parent) (into #{}))
+        output (->> (review/subtree-nodes relations root)
+                    (remove parent-nodes))]
+    (println output)
+    output))
+
+(defn get-reportoires-for-color [db color]
+  (let [tag-containments (db/get-tag-containments db)
+        root-reportoire (review/get-default-reportoire color)]
+    (subtree-leaves tag-containments root-reportoire)))
+
+(defn init
+  ([state]
+   (let [{:keys [db color]} state
+         reportoire (first (get-reportoires-for-color db color))]
+     (init state reportoire)))
+  ([state reportoire]
+   (let [{:keys [db
+                 color
+                 promote-piece]} state
+         tree (review/load-tree db reportoire)]
+     (-> {:reportoire reportoire
+          :tree tree
+          :color color
+          :selected-square nil
+          :promote-piece promote-piece
+          :db db
+          :error nil}
+         map->OpeningsEditor))))
 
 (defn reload-tree [state]
   (let [{:keys [db
@@ -70,7 +87,7 @@
                 color
                 reportoire]} state
         line (tree/get-line tree)
-        moves (db/get-tagged-moves db reportoire)]
+        moves (db/get-tagged-moves db reportoire :include-child-tags true)]
     (assoc state :tree (tree/new moves line))))
 
 (defn move-conflicts-with-reportoire?
@@ -99,7 +116,7 @@
         line (tree/get-line tree)
         conflicting-move (line-conflicts-with-reportoire? tree color line)
         error (cond
-                (not (line/ends-with-opponent-to-play? line))
+                (not (line/ends-with-opponent-to-play? line color))
                   (format "Line must end with %s play"
                           (u/other-color color))
                 conflicting-move
@@ -127,26 +144,28 @@
           reload-tree))))
 
 (defn click-square [state square]
-  (let [{:keys [selected-square
-                color
-                tree
-                promote-piece
-                tag]} state
+  (let [selected-square (.selected_square state)
+        color (.color state)
+        tree (.tree state)
+        promote-piece (.promote_piece state)
+        reportoire (.reportoire state)
         fen (tree/get-fen tree)
         move (when selected-square
-               (move/new-from-squares tag
+               (move/new-from-squares reportoire
                                       fen
                                       selected-square
                                       square
                                       promote-piece))]
     (cond
       (and (not= selected-square square)
-           (fen/active-player-has-piece-on-square? fen color square))
+           (fen/active-player-has-piece-on-square? fen square))
         (assoc state :selected-square square)
       (= selected-square square)
         (assoc state :selected-square nil)
       move
-        (update state :tree tree/apply-move move)
+        (-> state
+            (update :tree tree/apply-move move)
+            (assoc :selected-square nil))
       :else
         state)))
 
@@ -156,6 +175,7 @@
       init))
 
 (defn alternative-move [state san]
+  (println (class state))
   (let [t1 (-> (:tree state)
                tree/jump-to-final-frame)
         m (->> (tree/get-moves t1)
@@ -167,3 +187,11 @@
 (defn switch-lock [state] (update state :tree tree/switch-lock))
 (defn reset-board [state] (update state :tree tree/jump-to-initial-frame))
 (defn undo-last-move [state] (update state :tree tree/up))
+
+(defn next-reportoire [state]
+  (let [{:keys [color reportoire db]} state
+        reportoires (get-reportoires-for-color db color)
+        old-idx (u/index-of-first #(= reportoire %) reportoires)
+        new-idx (-> old-idx inc (mod (count reportoires)))
+        new-reportoire (nth reportoires new-idx)]
+    (init state new-reportoire)))

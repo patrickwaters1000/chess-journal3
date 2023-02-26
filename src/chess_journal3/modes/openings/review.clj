@@ -8,7 +8,8 @@
     [chess-journal3.move :as move]
     [chess-journal3.pgn :as pgn]
     [chess-journal3.tree :as tree]
-    [chess-journal3.utils :as u])
+    [chess-journal3.utils :as u]
+    [clojure.set :as set])
   (:import
     (chess_journal3.tree Tree)
     (chess_journal3.utils IState)))
@@ -39,6 +40,7 @@
           visible-sans (-> line line/truncate-at-current-fen line/get-sans)
           fen (tree/get-fen tree)]
       {:mode (.getMode state)
+       :openingReportoire reportoire
        :fen fen
        :sans sans
        :idx (line/get-idx line)
@@ -48,6 +50,7 @@
        :alternativeMoves (get-alternative-moves tree)
        :pgn (pgn/sans->pgn visible-sans)
        :playerColor color
+       :flipBoard (= "b" color)
        :activeColor (fen/get-active-color fen)
        :promotePiece promote-piece})))
 
@@ -55,6 +58,18 @@
   (case color
     "w" "white-reportoire"
     "b" "black-reportoire"))
+
+(defn subtree-nodes [relations root]
+  (loop [family #{root}
+         parents #{root}]
+    (let [children (->> relations
+                        (filter #(contains? parents (:parent %)))
+                        (map :child)
+                        (into #{}))
+          new-family (set/union family children)]
+      (if (empty? children)
+        (sort family)
+        (recur new-family children)))))
 
 (defn opponent-must-move? [tree color]
   (and (-> tree
@@ -68,26 +83,29 @@
     (assoc state :opponent-must-move omm)))
 
 (defn load-tree [db reportoire]
-  (let [moves (db/get-tagged-moves db reportoire)
+  (let [moves (db/get-tagged-moves db reportoire :include-child-tags true)
         line (line/new-stub reportoire c/initial-fen)]
     (tree/new moves line)))
 
-(defn init [state]
-  (let [{:keys [db
-                color
-                promote-piece]} state
-        reportoire (get-default-reportoire color)
-        tree (load-tree db reportoire)
-        omm (opponent-must-move? tree color)]
-    (-> {:db db
-         :reportoire reportoire
-         :tree tree
-         :color color
-         :selected-square nil
-         :promote-piece promote-piece
-         :opponent-must-move omm}
-        map->OpeningsReview
-        set-opponent-must-move)))
+(defn init
+  ([state]
+   (let [reportoire (get-default-reportoire (:color state))]
+     (init state reportoire)))
+  ([state reportoire]
+   (let [{:keys [db
+                 color
+                 promote-piece]} state
+         tree (load-tree db reportoire)
+         omm (opponent-must-move? tree color)]
+     (-> {:db db
+          :reportoire reportoire
+          :tree tree
+          :color color
+          :selected-square nil
+          :promote-piece promote-piece
+          :opponent-must-move omm}
+         map->OpeningsReview
+         set-opponent-must-move))))
 
 ;; This fn can handle both the player's moves and the opponent's moves.
 (defn move [state]
@@ -167,3 +185,23 @@
   (-> state
       (update :tree tree/jump-to-initial-frame)
       set-opponent-must-move))
+
+(defn next-reportoire [state]
+  (let [{:keys [color reportoire db]} state
+        tag-containments (db/get-tag-containments db)
+        root-reportoire (get-default-reportoire color)
+        relevant-tags (subtree-nodes tag-containments root-reportoire)
+        _ (println relevant-tags)
+        old-idx (u/index-of-first #(= reportoire %) relevant-tags)
+        new-idx (-> old-idx inc (mod (count relevant-tags)))
+        new-reportoire (nth relevant-tags new-idx)]
+    (init state new-reportoire)))
+
+(comment
+  (def tag-containments (db/get-tag-containments db/db))
+  (->> tag-containments
+       (remove #(contains? #{"white-games" "black-games"}
+                           (:parent_tag %))))
+
+  ;;
+  )

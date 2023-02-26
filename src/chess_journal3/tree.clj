@@ -8,8 +8,7 @@
     (chess_journal3.move Move)))
 
 (defrecord Tree
-  [tag
-   fen->moves
+  [fen->moves
    fen->num-lines
    initial-fen ;; Lines start here.
    base-fen ;; Iteration preserves that lines go through here.
