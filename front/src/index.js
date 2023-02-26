@@ -24,7 +24,7 @@ const event = (name, body) => {
         }
         handle.setState(newState);
         if (newState.opponentMustMove) {
-            event('opponent-move');
+            event(newState.mode+'/opponent-move');
         }
     });
 };
@@ -155,18 +155,16 @@ class Page extends React.Component {
             buttons = [
                 Button({ name: "set-mode", body: "menu", text: "Exit" }),
                 Button({ name: "switch-color", text: "Switch color" }),
-                Button({ name: "switch-lock", text: (isLocked ? "Unlock" : "Lock") }),
-                Button({ name: "reset", text: "Reset" }),
-                Button({ name: "add-line", text: "Add line" }),
-                Button({ name: "delete-subtree", text: "Delete subtree", confirm: true }),
+                Button({ name: "openings-editor/switch-lock", text: (isLocked ? "Unlock" : "Lock") }),
+                Button({ name: "openings-editor/reset", text: "Reset" }),
+                Button({ name: "openings-editor/add-line", text: "Add line" }),
+                Button({ name: "openings-editor/delete-subtree", text: "Delete subtree", confirm: true }),
             ];
         } else if (mode == "openings-review") {
             buttons = [
                 Button({ name: "set-mode", body: "menu", text: "Exit" }),
                 Button({ name: "switch-color", text: "Switch color" }),
-                Button({ name: "switch-lock", text: (isLocked ? "Unlock" : "Lock") }),
-              	Button({ name: "reset", text: "Reset" }),
-                Button({ name: "give-up", text: "Give up" }),
+                Button({ name: "openings-review/switch-lock", text: (isLocked ? "Unlock" : "Lock") }),
             ];
         } else if (mode == "games") {
             buttons = [
