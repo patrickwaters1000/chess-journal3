@@ -329,7 +329,7 @@ document.addEventListener("keydown", (e) => {
         }
     }
     console.log(`Key = ${key}`);
-    event("key", key);
+    event(`${handle.state.mode}/key`, key);
 });
 
 window.addEventListener("DOMContentLoaded", () => {

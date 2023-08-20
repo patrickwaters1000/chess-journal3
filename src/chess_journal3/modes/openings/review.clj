@@ -54,12 +54,7 @@
        :activeColor (fen/get-active-color fen)
        :promotePiece promote-piece})))
 
-(defn get-default-reportoire [color]
-  (case color
-    "w" "white-reportoire"
-    "b" "black-reportoire"))
-
-(defn subtree-nodes [relations root]
+(defn- subtree-nodes [relations root]
   (loop [family #{root}
          parents #{root}]
     (let [children (->> relations
@@ -70,6 +65,22 @@
       (if (empty? children)
         (sort family)
         (recur new-family children)))))
+
+(defn subtree-leaves [relations root]
+  (let [parent-nodes (->> relations (map :parent) (into #{}))
+        output (->> (subtree-nodes relations root)
+                    (remove parent-nodes))]
+    output))
+
+(defn- get-root-reportoire [color]
+  (case color
+    "w" "white-reportoire"
+    "b" "black-reportoire"))
+
+(defn get-default-reportoire [db color]
+  (let [tag-containments (db/get-tag-containments db)
+        root-reportoire (get-root-reportoire color)]
+    (first (subtree-leaves tag-containments root-reportoire))))
 
 (defn opponent-must-move? [tree color]
   (and (-> tree
@@ -89,7 +100,7 @@
 
 (defn init
   ([state]
-   (let [reportoire (get-default-reportoire (:color state))]
+   (let [reportoire (get-default-reportoire (:db state) (:color state))]
      (init state reportoire)))
   ([state reportoire]
    (let [{:keys [db
@@ -125,8 +136,8 @@
                 promote-piece]} state
         fen (-> state :tree tree/get-fen)
         san (chess/get-san fen selected-square square :promote-piece promote-piece)
-        correct-san (-> tree tree/get-sans u/get-unique)]
-    (= correct-san san)))
+        correct-sans (-> tree tree/get-sans set)]
+    (contains? correct-sans san)))
 
 (defn click-square [state square]
   (let [{:keys [selected-square
@@ -189,9 +200,9 @@
 (defn next-reportoire [state]
   (let [{:keys [color reportoire db]} state
         tag-containments (db/get-tag-containments db)
-        root-reportoire (get-default-reportoire color)
-        relevant-tags (subtree-nodes tag-containments root-reportoire)
-        _ (println relevant-tags)
+        root-reportoire (get-root-reportoire color)
+        relevant-tags (subtree-leaves tag-containments root-reportoire)
+        _ (println "hi" relevant-tags)
         old-idx (u/index-of-first #(= reportoire %) relevant-tags)
         new-idx (-> old-idx inc (mod (count relevant-tags)))
         new-reportoire (nth relevant-tags new-idx)]

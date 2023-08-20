@@ -50,17 +50,10 @@
        :flipBoard (= "b" color)
        :promotePiece promote-piece})))
 
-(defn subtree-leaves [relations root]
-  (let [parent-nodes (->> relations (map :parent) (into #{}))
-        output (->> (review/subtree-nodes relations root)
-                    (remove parent-nodes))]
-    (println output)
-    output))
-
 (defn get-reportoires-for-color [db color]
   (let [tag-containments (db/get-tag-containments db)
-        root-reportoire (review/get-default-reportoire color)]
-    (subtree-leaves tag-containments root-reportoire)))
+        root-reportoire (review/get-default-reportoire db color)]
+    (review/subtree-leaves tag-containments root-reportoire)))
 
 (defn init
   ([state]
@@ -132,7 +125,7 @@
   (if-not (-> state :tree tree/get-fen fen/players-move?)
     (assoc state :error "Can only delete subtree when it's your move.")
     (let [{:keys [db tree color]} state
-          new-tag (case (review/get-default-reportoire color)
+          new-tag (case (review/get-default-reportoire db color)
                     "white-reportoire" "deleted-white-reportoire"
                     "black-reportoire" "deleted-black-reportoire")]
       (->> (tree/get-lines-from-current-fen tree)
