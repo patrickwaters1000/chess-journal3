@@ -40,7 +40,8 @@
 ;; 34. Alternative move buttons persist after exiting to the main menu.
 ;; 35. Moving pieces fails in review mode unless on a leaf reportoire.
 
-(def state (atom (menu/init {:color "w" :db db/db})))
+(defn get-initial-state [] (menu/init {:color "w" :db db/db}))
+(def state (atom (get-initial-state)))
 
 (defn route [f & args]
   (apply swap! state f args)
@@ -165,8 +166,33 @@
       )
   (do (def s1 @state)
       (def s2 (openings-review/init s1))
-      (def s3 (openings-review/click-square s2 "E2"))
-      (def s4 (openings-review/click-square s3 "E4"))
+      (def s3 (openings-review/next-reportoire s2))
+      (def s4 (openings-review/click-square s3 "E2"))
+
+      (require '[chess-journal3.tree :as tree]
+               '[chess-journal3.chess :as chess])
+      (require)
+      (let [state s3
+            square "E4"
+            {:keys [selected-square
+                    color
+                    tree]} state
+            fen (tree/get-fen tree)
+            {:keys [promote-piece]} state
+            fen (-> state :tree tree/get-fen)
+            san (chess/get-san fen selected-square square :promote-piece promote-piece)
+
+            ;;correct-san (-> tree tree/get-sans u/get-unique)
+            ]
+        fen
+        san
+        (-> tree tree/get-sans ;;u/get-unique
+            )
+        ;;(openings-review/move-to-square-is-correct? state square)
+        )
+
+      (def s5 (openings-review/click-square s4 "E4"))
+      (tree/get-fen (:tree s5))
       (def s5 (openings-review/opponent-move s4))
       (def s6 (openings-review/click-square s5 "G1"))
       (def s7 (openings-review/click-square s6 "F3"))

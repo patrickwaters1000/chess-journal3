@@ -69,6 +69,14 @@
                     (move/initial-fen (first moves)))
           moves))
 
+;; Used for tests
+(defn new-from-sans [tag initial-fen sans]
+  (new-from-moves
+    (reductions (fn [move san]
+                  (move/new-from-san tag (move/final-fen move) san))
+                (move/new-from-san tag initial-fen (first sans))
+                (rest sans))))
+
 (defn complete? [^Line l]
   (= (:idx l)
      (length l)))
