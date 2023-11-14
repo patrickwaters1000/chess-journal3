@@ -2,12 +2,12 @@
   (:require
     [chess-journal3.constants :as c])
   (:import
-    (chess_journal3.utils IState)))
+    (chess_journal3.state GlobalState LocalState)))
 
 (defrecord Menu
   [color
    db]
-  IState
+  LocalState
   (getMode [_] "menu")
   (getFen [_] (c/initial-fen))
   (nextFrame [state] state)
@@ -25,6 +25,6 @@
      :color color
      :activeColor "w"}))
 
-(defn init [state]
-  (map->Menu {:db (:db state)
-              :color (:color state)}))
+(defn init [^GlobalState s]
+  (map->Menu {:db (:db s)
+              :color "w"}))

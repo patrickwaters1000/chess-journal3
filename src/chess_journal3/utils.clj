@@ -2,16 +2,6 @@
   (:require
     [clojure.string :as string]))
 
-(definterface IState
-  (getMode [])
-  (getFen []) ;; Do we need this?
-  (nextFrame [])
-  (prevFrame [])
-  (switchColor [])
-  (clickSquare [square])
-  (makeClientView [])
-  (cleanUp []))
-
 (defn- map-vals [f m]
   (reduce-kv (fn [acc k v]
                (assoc acc k (f v)))

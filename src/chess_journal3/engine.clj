@@ -2,6 +2,7 @@
   "Wrapper for inerfacing with external chess engine process according
   to Universal Chess Interface protocol."
   (:require
+    [chess-journal3.move :as move]
     [clj-time.core :as t]
     [clojure.core.async :as a :refer [>! <! >!! <!! go chan buffer close! thread
                                       alts! alts!! timeout go-loop]]
@@ -18,15 +19,23 @@
 
 (def log-file "engine-log.txt")
 
-(defn parse-uci-move
+(defn- parse-uci-move
   "Parses a move from the format used by Universal Chess Interface."
-  [uci-move-str]
+  [fen uci-move-str]
   (let [from (string/upper-case (subs uci-move-str 0 2))
         to (string/upper-case (subs uci-move-str 2 4))
         promote (when (< 4 (.length uci-move-str))
                   (string/upper-case (subs uci-move-str 4 5)))]
-    (cond-> {:from from :to to}
-      promote (assoc :promote promote))))
+    (move/new-from-squares nil
+                           fen
+                           from
+                           to
+                           promote)))
+
+(definterface IEngine
+  (getMove [fen elo movetime]))
+
+(declare get-move)
 
 (defrecord Engine
   [^Process p
@@ -38,9 +47,12 @@
     (.destroyForcibly p)
     (close! in)
     (close! out)
-    (close! err)))
+    (close! err))
+  IEngine
+  (getMove [engine fen elo movetime]
+    (get-move engine fen elo movetime)))
 
-(defn log [msg-type msg-str]
+(defn- log [msg-type msg-str]
   (spit log-file
         (format "%s %s\n%s\n\n"
                 (t/now)
@@ -93,7 +105,7 @@
           (recur)))))
 
 ;; TODO Throw exceptions of the engine writes to stderr.
-(defn get-move* [^Engine e fen movetime]
+(defn- get-move* [^Engine e fen movetime]
   (let [in (:in e)
         out (:out e)
         move-millis (t/in-millis movetime)
@@ -102,8 +114,8 @@
         move-regex #"^bestmove (.*) ponder .*$"]
     (>!! in fen-msg)
     (>!! in go-msg)
-    (let [[_ move] (recieve e move-regex)]
-      (parse-uci-move move))))
+    (let [[_ move-str] (recieve e move-regex)]
+      (parse-uci-move fen move-str))))
 
 (defn- set-elo [^Engine e elo]
   (let [in (:in e)
@@ -117,7 +129,7 @@
 ;; TODO Check if clojure.core/memoize does the same thing.
 (def fen-x-elo->move (atom {}))
 
-(defn get-move [^Engine e & {:keys [fen elo movetime]}]
+(defn- get-move [^Engine e fen elo movetime]
   (or (get @fen-x-elo->move [fen elo])
       (locking lock
         (when elo

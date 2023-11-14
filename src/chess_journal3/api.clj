@@ -4,17 +4,18 @@
     [chess-journal3.constants :as c]
     ;;[chess-journal3.core :as core]
     [chess-journal3.db :as db]
-    ;;[chess-journal3.engine :as engine]
+    [chess-journal3.engine :as engine]
     [chess-journal3.fen :as fen]
+    [chess-journal3.modes.battle :as battle]
     ;;[chess-journal3.modes.endgames :as endgames]
     ;;[chess-journal3.modes.games :as games]
-    ;;[chess-journal3.modes.live-games :as live-games]
+    [chess-journal3.modes.live-games :as live-games]
     [chess-journal3.modes.menu :as menu]
-    ;;[chess-journal3.modes.battle :as battle]
     [chess-journal3.modes.openings.editor :as openings-editor]
     [chess-journal3.modes.openings.review :as openings-review]
     ;;[chess-journal3.modes.setup :as setup]
     [chess-journal3.pgn :as pgn]
+    [chess-journal3.state :as s]
     ;;[chess-journal3.tablebase :as tablebase]
     [chess-journal3.utils :as u]
     [clj-time.core :as t]
@@ -22,6 +23,18 @@
     [compojure.core :refer :all]
     [org.httpkit.server :refer [run-server]]
     [ring.middleware.params :as rmp]))
+
+;; Notes:
+;; 10/22/2023
+;; Working on battle mode.
+;; Battle mode requires stuff the openings modes don't, e.g., engine, engine-movetime.
+;; How should I keep track of engine-movetime?
+;; 1 Don't want to add it to all modes
+;; 2 Could create a global config variable that is merged with the old state when
+;;   calling each mode's init function
+;; 3 Could have the app maintain a state for each mode. This could have some strange properties though
+;;   for example if you set the Elo in battle mode, that would not affect endgames mode.
+;; Go with 2. The mode state should be initialized by selecting keys of the global app config.
 
 ;; Build front end:
 ;; > cd front && npx webpack
@@ -40,14 +53,22 @@
 ;; 34. Alternative move buttons persist after exiting to the main menu.
 ;; 35. Moving pieces fails in review mode unless on a leaf reportoire.
 
-(defn get-initial-state [] (menu/init {:color "w" :db db/db}))
-(def state (atom (get-initial-state)))
+(defn- prepare-response [app-state]
+  (let [v (.makeClientView (s/get-local-state @s/app-state))]
+    (json/generate-string v)))
 
-(defn route [f & args]
-  (apply swap! state f args)
-  (let [v (.makeClientView @state)
-        resp (json/generate-string v)]
-    (swap! state #(.cleanUp %))
+(defn- route [f & args]
+  (apply swap! s/app-state s/update-local-state f args)
+  (let [resp (prepare-response @s/app-state)]
+    (println (s/get-local-state @s/app-state))
+    (swap! s/app-state s/update-local-state #(.cleanUp %))
+    resp))
+
+(defn- global-route [f & args]
+  (apply swap! s/app-state f args)
+  (let [resp (prepare-response @s/app-state)]
+    (println (s/get-local-state @s/app-state))
+    (swap! s/app-state s/update-local-state #(.cleanUp %))
     resp))
 
 (defroutes openings-review-routes
@@ -63,7 +84,7 @@
       (case keycode
         "ArrowLeft" (route #(.prevFrame %))
         "ArrowRight" (route #(.nextFrame %))
-        "Enter" (case (.getMode @state)
+        "Enter" (case (.getMode @s/app-state)
                   "openings-review" (route openings-review/next-line))
         (println (format "Unexpected keyboard event %s" keycode))))))
 
@@ -86,6 +107,41 @@
          "Backspace") (route openings-editor/undo-last-move)
         (println (format "Unexpected keyboard event %s" keycode))))))
 
+;; Start position can be standard or other
+;; The game can be live or complete
+;; Game can be saved. The first time a game is s
+(defroutes battle-routes
+  (POST "/battle/key" {body :body}
+    (let [keycode (json/parse-string (slurp body))]
+      (case keycode
+        "ArrowLeft" (route #(.prevFrame %))
+        "ArrowRight" (route #(.nextFrame %))
+        (println (format "Unexpected keyboard event %s" keycode)))))
+  (POST "/battle/opponent-move" _ (route battle/opponent-move)))
+
+;;(defroutes endgames-routes
+;;  (POST "/endgames/coarsen-class" _ (route endgames/coarsen-class))
+;;  (POST "/endgames/refine-class" _ (route endgames/refine-class))
+;;  (POST "/endgames/next-position" _ (route endgames/next-position))
+;;  (POST "/endgames/prev-position" _ (route endgames/prev-position))
+;;  (POST "/endgames/opponent-move" _ (route endgames/prev-position))
+;;  (POST "/endgames/toggle-evaluation" _ (route endgames/toggle-evaluation)))
+
+(defn- change-mode [app-state mode]
+  (let [init-fn (case mode
+                  "menu" menu/init
+                  "openings-editor" openings-editor/init
+                  "openings-review" openings-review/init
+                  "battle" battle/init
+                  ;;"games" games/init
+                  ;;"setup" setup/init
+                  ;;"endgames" endgames/init
+                  "live-games" live-games/init)
+        local-state (init-fn app-state)]
+    (-> app-state
+        (assoc-in [:mode->local-state mode] local-state)
+        (assoc :mode mode))))
+
 (defroutes common-routes
   (GET "/" [] (slurp "front/dist/index.html"))
   (GET "/main.js" [] (slurp "front/dist/main.js"))
@@ -96,19 +152,9 @@
   (POST "/switch-color" _ (route #(.switchColor %)))
   (POST "/cycle-promote-piece" _ (route u/cycle-promote-piece))
   (POST "/set-mode" {body :body}
-    (let [mode (json/parse-string (slurp body))
-          f (case mode
-              "menu" menu/init
-              "openings-editor" openings-editor/init
-              "openings-review" openings-review/init
-              ;;"battle" battle/init
-              ;;"games" games/init
-              ;;"setup" setup/init
-              ;;"endgames" endgames/init
-              ;;"live-games" live-games/init
-              )]
+    (let [mode (json/parse-string (slurp body))]
       (println mode)
-      (route f))))
+      (global-route change-mode mode))))
 
 ;;(POST "/key" {body :body}
 ;;      (let [keycode (json/parse-string (slurp body))]
@@ -142,6 +188,7 @@
 (defroutes all-routes
   openings-editor-routes
   openings-review-routes
+  battle-routes
   common-routes)
 
 ;; When calling a state function from a mode ns, should check that the current mode matches the ns.
@@ -152,11 +199,14 @@
     (handler request)))
 
 (defn -main [& _]
-  (println "Ready!")
-  (run-server (-> all-routes
-                  rmp/wrap-params
-                  wrap-print-url)
-              {:port 3000}))
+  (let [engine (engine/make)
+        initial-state (s/get-initial-app-state db/db engine)]
+    (reset! s/app-state initial-state)
+    (println "Ready!")
+    (run-server (-> all-routes
+                    rmp/wrap-params
+                    wrap-print-url)
+                {:port 3000})))
 
 (comment
   (do (def s1 @state)

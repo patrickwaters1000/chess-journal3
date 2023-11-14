@@ -243,13 +243,15 @@ FROM v
 
 (defn list-live-games [db]
   (->> "
-SELECT t.name AS name
+SELECT t.name AS game_name,
+       CASE WHEN g.white = 'user' THEN 'w'
+            ELSE 'b'
+            END AS color
 FROM games g LEFT JOIN tags t ON g.tag_id = t.id
 WHERE g.result IS NULL
   AND ((g.white = 'user' AND g.black = 'chess-journal3')
        OR (g.black = 'user' AND g.white = 'chess-journal3'));"
-       (jdbc/query db)
-       (map :name)))
+       (jdbc/query db)))
 
 (defn complete-live-game [db game-name result]
   {:pre [(contains? #{"0-1" "1/2-1/2" "1-0"})]}

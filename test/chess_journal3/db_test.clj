@@ -17,9 +17,11 @@
   (db/create-moves-table! db)
   (db/create-tags-table! db)
   (db/create-tag-containments-table! db)
-  (db/create-tagged-moves-table! db))
+  (db/create-tagged-moves-table! db)
+  (db/create-games-table! db))
 
 (defn tear-down! [db]
+  (jdbc/execute! db "DROP TABLE IF EXISTS games;")
   (jdbc/execute! db "DROP TABLE IF EXISTS tagged_moves;")
   (jdbc/execute! db "DROP TABLE IF EXISTS tag_containments;")
   (jdbc/execute! db "DROP TABLE IF EXISTS tags;")

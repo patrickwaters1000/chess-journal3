@@ -10,8 +10,8 @@
     [chess-journal3.tree :as tree]
     [chess-journal3.utils :as u])
   (:import
-    (chess_journal3.tree Tree)
-    (chess_journal3.utils IState)))
+    (chess_journal3.state LocalState GlobalState)
+    (chess_journal3.tree Tree)))
 
 (declare switch-color
          click-square)
@@ -24,7 +24,7 @@
    promote-piece
    error
    db]
-  IState
+  LocalState
   (getMode [_] "openings-editor")
   (getFen [_] (tree/get-fen tree))
   (nextFrame [state] (update state :tree tree/next-frame))
@@ -32,6 +32,7 @@
   (switchColor [state] (switch-color state))
   (clickSquare [state square] (click-square state square))
   (cleanUp [state] (assoc state :error nil))
+  (getLine [state] (tree/get-line tree))
   (makeClientView [state]
     (let [line (tree/get-line tree)
           sans (line/get-sans line)
@@ -55,15 +56,19 @@
         root-reportoire (review/get-default-reportoire db color)]
     (review/subtree-leaves tag-containments root-reportoire)))
 
+;; Seems bad for init to refer to fields of another state, since the state in
+;; various modes has different fields. If we generally need to get certain
+;; things from the old state when changing modes, we should make getting them
+;; part of the state interface.
 (defn init
-  ([state]
-   (let [{:keys [db color]} state
+  ([^GlobalState s]
+   (let [{:keys [db color]} s
          reportoire (first (get-reportoires-for-color db color))]
-     (init state reportoire)))
-  ([state reportoire]
+     (init s reportoire)))
+  ([^GlobalState s reportoire]
    (let [{:keys [db
                  color
-                 promote-piece]} state
+                 promote-piece]} s
          tree (review/load-tree db reportoire)]
      (-> {:reportoire reportoire
           :tree tree

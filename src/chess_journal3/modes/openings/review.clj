@@ -11,8 +11,8 @@
     [chess-journal3.utils :as u]
     [clojure.set :as set])
   (:import
-    (chess_journal3.tree Tree)
-    (chess_journal3.utils IState)))
+    (chess_journal3.state LocalState GlobalState)
+    (chess_journal3.tree Tree)))
 
 (declare get-alternative-moves
          click-square
@@ -26,7 +26,7 @@
    selected-square
    promote-piece
    db]
-  IState
+  LocalState
   (getMode [_] "openings-review")
   (getFen [_] (tree/get-fen tree))
   (nextFrame [state] (update state :tree tree/next-frame))
@@ -34,6 +34,7 @@
   (switchColor [state] (switch-color state))
   (clickSquare [state square] (click-square state square))
   (cleanUp [state] (assoc state :opponent-must-move false))
+  (getLine [state] (tree/get-line tree))
   (makeClientView [state]
     (let [line (tree/get-line tree)
           sans (line/get-sans line)
@@ -88,7 +89,7 @@
            (fen/opponents-move? color))
        (not (tree/line-complete? tree))))
 
-(defn set-opponent-must-move [state]
+(defn set-opponent-must-move [^OpeningsReview state]
   (let [{:keys [tree color]} state
         omm (opponent-must-move? tree color)]
     (assoc state :opponent-must-move omm)))
@@ -99,10 +100,10 @@
     (tree/new moves line)))
 
 (defn init
-  ([state]
+  ([^OpeningsReview state]
    (let [reportoire (get-default-reportoire (:db state) (:color state))]
      (init state reportoire)))
-  ([state reportoire]
+  ([^OpeningsReview state reportoire]
    (let [{:keys [db
                  color
                  promote-piece]} state
@@ -119,18 +120,18 @@
          set-opponent-must-move))))
 
 ;; This fn can handle both the player's moves and the opponent's moves.
-(defn move [state]
+(defn move [^OpeningsReview state]
   (-> state
       (update :tree tree/next-frame)
       (assoc :selected-square nil)
       set-opponent-must-move))
 
-(defn opponent-move [state]
+(defn opponent-move [^OpeningsReview state]
   {:pre [(fen/opponents-move? (tree/get-fen (:tree state))
                               (:color state))]}
   (move state))
 
-(defn move-to-square-is-correct? [state square]
+(defn move-to-square-is-correct? [^OpeningsReview state square]
   (let [{:keys [tree
                 selected-square
                 promote-piece]} state
@@ -139,7 +140,7 @@
         correct-sans (-> tree tree/get-sans set)]
     (contains? correct-sans san)))
 
-(defn click-square [state square]
+(defn click-square [^OpeningsReview state square]
   (let [{:keys [selected-square
                 color
                 tree]} state
@@ -159,10 +160,10 @@
       :else
         state)))
 
-(defn give-up [state]
+(defn give-up [^OpeningsReview state]
   (move state))
 
-(defn switch-color [state]
+(defn switch-color [^OpeningsReview state]
   (-> state
       (update :color u/other-color)
       init))
@@ -170,7 +171,7 @@
 (defn- get-alternative-moves [^Tree t]
   (-> t tree/prev-frame tree/get-alternative-moves))
 
-(defn alternative-move [state san]
+(defn alternative-move [^OpeningsReview state san]
   (let [frame-idx (tree/get-idx (:tree state))
         t1 (-> (:tree state)
                tree/truncate-line-at-current-fen
@@ -185,19 +186,19 @@
         (assoc :tree t2)
         (update :tree tree/jump-to-frame frame-idx))))
 
-(defn next-line [state]
+(defn next-line [^OpeningsReview state]
   (-> state
       (update :tree tree/next-line)
       (update :tree tree/jump-to-base-frame)))
 
-(defn switch-lock [state] (update state :tree tree/switch-lock))
+(defn switch-lock [^OpeningsReview state] (update state :tree tree/switch-lock))
 
-(defn reset-board [state]
+(defn reset-board [^OpeningsReview state]
   (-> state
       (update :tree tree/jump-to-initial-frame)
       set-opponent-must-move))
 
-(defn next-reportoire [state]
+(defn next-reportoire [^OpeningsReview state]
   (let [{:keys [color reportoire db]} state
         tag-containments (db/get-tag-containments db)
         root-reportoire (get-root-reportoire color)

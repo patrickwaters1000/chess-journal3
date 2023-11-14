@@ -69,6 +69,22 @@
                     (move/initial-fen (first moves)))
           moves))
 
+(defn new-from-unsorted-moves
+  "Sorts a sequence of moves according to the order of the game, and returns
+  them as a `Line`."
+  [initial-fen unsorted-moves]
+  (loop [unsorted-moves (set unsorted-moves)
+         sorted-moves []
+         current-fen initial-fen]
+    (if (empty? unsorted-moves)
+      (new-from-moves sorted-moves)
+      (let [next-move (->> unsorted-moves
+                           (filter #(= current-fen (move/initial-fen %)))
+                           u/get-unique)]
+        (recur (disj unsorted-moves next-move)
+               (conj sorted-moves next-move)
+               (move/final-fen next-move))))))
+
 ;; Used for tests
 (defn new-from-sans [tag initial-fen sans]
   (new-from-moves
@@ -100,11 +116,16 @@
         (update :fens (comp vec #(take (inc idx) %)))
         (update :sans (comp vec #(take idx %))))))
 
+;; Do we need to check that the move is possible for the current fen?
 (defn apply-move [^Line l ^Move m]
-  (-> l
-      truncate-at-current-fen
-      (append m)
-      next-frame))
+  (try
+    (-> l
+        truncate-at-current-fen
+        (append m)
+        next-frame)
+    (catch Exception _
+      (throw (Exception.
+               (format "line = %s, move = %s" (into {} l) (into {} m)))))))
 
 (defn jump-to-frame [^Line l idx]
   {:pre [(pos? idx)
@@ -121,3 +142,14 @@
   (let [idx (u/index-of-first #(= fen %) (get-fens l))]
     (assert (some? idx))
     (assoc l :idx idx)))
+
+(defn count-matching-moves [^Line l1 ^Line l2]
+  (let [moves-1 (to-moves l1)
+        moves-2 (to-moves l2)]
+    (if (not= (move/initial-fen (first moves-1))
+              (move/initial-fen (first moves-2)))
+      0
+      (->> (map vector moves-1 moves-2)
+           (take-while #(= (move/san (first %))
+                           (move/san (second %))))
+           count))))

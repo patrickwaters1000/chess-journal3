@@ -59,6 +59,7 @@
 ;; TODO Handle invalid inputs.
 (defn get-san
   [fen from-square to-square & {:keys [promote-piece]}]
+  ;;(println (format "fen=%s, from=%s, to=%s, promote=%s" fen from-square to-square promote-piece))
   (->> (move-to-object from-square to-square promote-piece)
        (object-to-san fen)))
 
@@ -67,6 +68,7 @@
 ;;-----------------------------------------------------------------------------;;
 
 (defn apply-san [fen san]
+  (println fen san)
   (let [board (Board.)
         move-list (MoveList. fen)]
     (.loadFromFen board fen)
@@ -78,16 +80,19 @@
 ;;-------------                    Legal moves                       ----------;;
 ;;-----------------------------------------------------------------------------;;
 
-(defn- get-legal-moves [fen]
+;; NOTE The namespace deliberately doesn't use chess-journal3.move. Here we are
+;; just exposing a Clojure API for the functionality we need from the chess
+;; Java library. There is a wrapper for this in chess-journal3.move though.
+;; TODO Return promote piece
+(defn get-legal-move-sans [fen]
   (let [board (Board.)]
     (.loadFromFen board fen)
     (->> (MoveGenerator/generateLegalMoves board)
-         (map (fn [^com.github.bhlangonijr.chesslib.move.Move m]
-                [(str (.getFrom m))
-                 (str (.getTo m))])))))
+         (map #(object-to-san fen %)))))
 
-(defn legal-move? [fen from-square to-square]
-  (contains? (->> (get-legal-moves fen)
-                  (into #{}))
-             [(string/upper-case from-square)
-              (string/upper-case to-square)]))
+(defn legal-move?
+  ([fen san]
+   (contains? (set (get-legal-move-sans fen)) san))
+  ([fen from-square to-square promote-piece]
+   (let [san (get-san fen from-square to-square :promote-piece promote-piece)]
+     (legal-move? fen san))))
