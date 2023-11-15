@@ -203,7 +203,6 @@
         tag-containments (db/get-tag-containments db)
         root-reportoire (get-root-reportoire color)
         relevant-tags (subtree-leaves tag-containments root-reportoire)
-        _ (println "hi" relevant-tags)
         old-idx (u/index-of-first #(= reportoire %) relevant-tags)
         new-idx (-> old-idx inc (mod (count relevant-tags)))
         new-reportoire (nth relevant-tags new-idx)]

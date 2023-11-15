@@ -39,10 +39,11 @@
   (getLine []))
 
 (defn get-initial-app-state [db engine]
-  {:db db
-   :engine engine
-   :mode "menu"
-   :mode->local-state {}})
+  (map->GlobalState
+    {:db db
+     :engine engine
+     :mode "menu"
+     :mode->local-state {}}))
 
 (def app-state (atom nil))
 

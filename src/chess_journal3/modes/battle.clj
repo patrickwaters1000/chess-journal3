@@ -15,7 +15,8 @@
     (chess_journal3.state GlobalState LocalState)))
 
 (declare click-square
-         switch-color)
+         switch-color
+         make-client-view)
 
 (defrecord Battle
   [^Line line
@@ -37,21 +38,28 @@
   (clickSquare [state square] (click-square state square))
   (cleanUp [state] (assoc state :opponent-must-move false))
   (getLine [state] line)
-  (makeClientView [state]
-    (let [sans (line/get-sans line)
-          visible-sans (-> line line/truncate-at-current-fen line/get-sans)
-          fen (line/fen line)]
-      {:mode (.getMode state)
-       :fen fen
-       :sans sans
-       :idx (line/get-idx line)
-       :selectedSquare selected-square
-       :opponentMustMove opponent-must-move
-       :pgn (pgn/sans->pgn visible-sans)
-       :playerColor color
-       :flipBoard (= "b" color)
-       :activeColor (fen/get-active-color fen)
-       :promotePiece promote-piece})))
+  (makeClientView [state] (make-client-view state)))
+
+(defn- make-client-view [^Battle s]
+  (let [{:keys [line
+                color
+                opponent-must-move
+                selected-square
+                promote-piece]} s
+        sans (line/get-sans line)
+        visible-sans (-> line line/truncate-at-current-fen line/get-sans)
+        fen (line/fen line)]
+    {:mode (.getMode s)
+     :fen fen
+     :sans sans
+     :idx (line/get-idx line)
+     :selectedSquare selected-square
+     :opponentMustMove opponent-must-move
+     :pgn (pgn/sans->pgn visible-sans)
+     :playerColor color
+     :flipBoard (= "b" color)
+     :activeColor (fen/get-active-color fen)
+     :promotePiece promote-piece}))
 
 (defn- get-fen [state]
   (line/fen (.line state)))
@@ -117,3 +125,9 @@
   (-> state
       (update :color u/other-color)
       set-opponent-must-move))
+
+(defn set-engine-elo [^Battle s elo]
+  (assoc s :engine-elo elo))
+
+(defn set-engine-movetime [^Battle s movetime]
+  (assoc s :engine-movetime movetime))

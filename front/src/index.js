@@ -178,12 +178,12 @@ class Page extends React.Component {
             ];
         } else if (mode == "battle") {
             buttons = [
-                Button({ name: "set-mode", body: "menu", text: "Exit" }),
-                Button({ name: "set-elo", text: "Set Elo", prompt: "Elo:" }),
-                Button({ name: "reboot-engine", text: "Reboot engine" }),
-                Button({ name: "switch-color", text: "Switch color" }),
-                Button({ name: "cycle-promote-piece", text: `Promotions to ${promotePiece}` }),
-                Button({ name: "new-live-game", text: "Save", prompt: "Game name:" }),
+                Button({ name: "battle/set-mode", body: "menu", text: "Exit" }),
+                Button({ name: "battle/set-elo", text: "Set Elo", prompt: "Elo:" }),
+                Button({ name: "battle/reboot-engine", text: "Reboot engine" }),
+                Button({ name: "battle/switch-color", text: "Switch color" }),
+                Button({ name: "battle/cycle-promote-piece", text: `Promotions to ${promotePiece}` }),
+                Button({ name: "battle/new-live-game", text: "Save game", prompt: "Game name:" }),
             ];
         } else if (mode == "setup") {
             buttons = [
@@ -216,13 +216,15 @@ class Page extends React.Component {
         } else if (mode == "live-games") {
             buttons = [
                 Button({ name: "set-mode", body: "menu", text: "Exit" }),
-                Button({ name: "set-elo", text: "Set Elo", prompt: "Elo:" }),
-                Button({ name: "reboot-engine", text: "Reboot engine" }),
-                Button({ name: "cycle-promote-piece", text: `Promotions to ${promotePiece}` }),
-                Button({ name: "cycle-live-game", text: liveGameName }),
-                Button({ name: "end-live-game", text: "Complete", prompt: "Result" }),
-                Button({ name: "save-live-game", text: "Save" }),
-                Button({ name: "switch-color", text: `You are ${playerColor.toUpperCase()}` }),
+                Button({ name: "live-games/set-engine-elo", text: "Set engine elo", prompt: "Elo:" }),
+                Button({ name: "live-games/set-engine-movetime", text: "Set engine movetime", prompt: "Movetime in milliseconds:" }),
+                //Button({ name: "reboot-engine", text: "Reboot engine" }),
+                //Button({ name: "cycle-promote-piece", text: `Promotions to ${promotePiece}` }),
+                Button({ name: "live-games/cycle-game", body: 1, text: "Next game" }),
+                Button({ name: "live-games/cycle-game", body: -1, text: "Previous game" }),
+                Button({ name: "live-games/end-game", text: "End game", prompt: "Result" }),
+                Button({ name: "live-games/save-game", text: "Save game" }),
+                //Button({ name: "switch-color", text: `You are ${playerColor.toUpperCase()}` }),
             ];
         } else {
             buttons = [];

@@ -2,7 +2,6 @@
   (:require
     [cheshire.core :as json]
     [chess-journal3.constants :as c]
-    ;;[chess-journal3.core :as core]
     [chess-journal3.db :as db]
     [chess-journal3.engine :as engine]
     [chess-journal3.fen :as fen]
@@ -22,19 +21,9 @@
     [clojure.string :as string]
     [compojure.core :refer :all]
     [org.httpkit.server :refer [run-server]]
-    [ring.middleware.params :as rmp]))
-
-;; Notes:
-;; 10/22/2023
-;; Working on battle mode.
-;; Battle mode requires stuff the openings modes don't, e.g., engine, engine-movetime.
-;; How should I keep track of engine-movetime?
-;; 1 Don't want to add it to all modes
-;; 2 Could create a global config variable that is merged with the old state when
-;;   calling each mode's init function
-;; 3 Could have the app maintain a state for each mode. This could have some strange properties though
-;;   for example if you set the Elo in battle mode, that would not affect endgames mode.
-;; Go with 2. The mode state should be initialized by selecting keys of the global app config.
+    [ring.middleware.params :as rmp])
+  (:import
+    (chess_journal3.modes.battle Battle)))
 
 ;; Build front end:
 ;; > cd front && npx webpack
@@ -44,7 +33,8 @@
 ;;
 ;; TODO
 ;; 16. Show sans with current last san highlighted
-;; 18. Add explain move feature
+;; 18. Add explain move feature in openings review (use inputs explanation, and
+;;     can read it later).
 ;; 21. Move number in alternative moves buttons
 ;; 23. Instead of `opponentMustMove`, a `pendingMoveId`
 ;; 25. Add opponent lines to endgames mode
@@ -71,11 +61,36 @@
     (swap! s/app-state s/update-local-state #(.cleanUp %))
     resp))
 
+(defn- change-mode [app-state mode]
+  (let [init-fn (case mode
+                  "menu" menu/init
+                  "openings-editor" openings-editor/init
+                  "openings-review" openings-review/init
+                  "battle" battle/init
+                  ;;"games" games/init
+                  ;;"setup" setup/init
+                  ;;"endgames" endgames/init
+                  "live-games" live-games/init)
+        local-state (init-fn app-state)]
+    (-> app-state
+        (assoc-in [:mode->local-state mode] local-state)
+        (assoc :mode mode))))
+
+(defn- create-live-game [app-state game-name]
+  (let [^Battle local-state (s/get-local-state app-state)
+        db (.db app-state)
+        color (.color local-state)
+        line (.line local-state)]
+    (println (format "Creating game %s" game-name))
+    (live-games/create-new-game db game-name color line)
+    (-> app-state
+        (change-mode "live-games")
+        (s/update-local-state live-games/cycle-to-game game-name))))
+
 (defroutes openings-review-routes
   (POST "/openings-review/next-reportoire" _ (route openings-review/next-reportoire))
   (POST "/openings-review/alternative-move" {body :body}
     (let [san (json/parse-string (slurp body))]
-      (println san)
       (route openings-review/alternative-move san)))
   (POST "/openings-review/switch-lock" _ (route openings-review/switch-lock))
   (POST "/openings-review/opponent-move" _ (route openings-review/opponent-move))
@@ -92,7 +107,6 @@
   (POST "/openings-editor/next-reportoire" _ (route openings-editor/next-reportoire))
   (POST "/openings-editor/alternative-move" {body :body}
     (let [san (json/parse-string (slurp body))]
-      (println san)
       (route openings-editor/alternative-move san)))
   (POST "/openings-editor/switch-lock" _ (route openings-editor/switch-lock))
   (POST "/openings-editor/reset" _ (route openings-editor/reset-board))
@@ -117,30 +131,40 @@
         "ArrowLeft" (route #(.prevFrame %))
         "ArrowRight" (route #(.nextFrame %))
         (println (format "Unexpected keyboard event %s" keycode)))))
-  (POST "/battle/opponent-move" _ (route battle/opponent-move)))
+  (POST "/battle/opponent-move" _ (route battle/opponent-move))
+  (POST "/battle/set-engine-elo" {body :body}
+    (let [elo (Integer/parseInt (json/parse-string (slurp body)))]
+      (route battle/set-engine-elo elo)))
+  (POST "/battle/set-engine-movetime" {body :body}
+    (let [movetime-millis (Integer/parseInt (json/parse-string (slurp body)))
+          movetime (t/millis movetime-millis)]
+      (route battle/set-engine-movetime movetime)))
+  (POST "/battle/new-live-game" {body :body}
+    (let [game-name (json/parse-string (slurp body))]
+      (global-route create-live-game game-name))))
 
-;;(defroutes endgames-routes
-;;  (POST "/endgames/coarsen-class" _ (route endgames/coarsen-class))
-;;  (POST "/endgames/refine-class" _ (route endgames/refine-class))
-;;  (POST "/endgames/next-position" _ (route endgames/next-position))
-;;  (POST "/endgames/prev-position" _ (route endgames/prev-position))
-;;  (POST "/endgames/opponent-move" _ (route endgames/prev-position))
-;;  (POST "/endgames/toggle-evaluation" _ (route endgames/toggle-evaluation)))
-
-(defn- change-mode [app-state mode]
-  (let [init-fn (case mode
-                  "menu" menu/init
-                  "openings-editor" openings-editor/init
-                  "openings-review" openings-review/init
-                  "battle" battle/init
-                  ;;"games" games/init
-                  ;;"setup" setup/init
-                  ;;"endgames" endgames/init
-                  "live-games" live-games/init)
-        local-state (init-fn app-state)]
-    (-> app-state
-        (assoc-in [:mode->local-state mode] local-state)
-        (assoc :mode mode))))
+(defroutes live-games-routes
+  (POST "/live-games/key" {body :body}
+    (let [keycode (json/parse-string (slurp body))]
+      (case keycode
+        "ArrowLeft" (route #(.prevFrame %))
+        "ArrowRight" (route #(.nextFrame %))
+        (println (format "Unexpected keyboard event %s" keycode)))))
+  (POST "/live-games/opponent-move" _ (route live-games/opponent-move))
+  (POST "/live-games/save-game" _ (route live-games/save-game))
+  (POST "/live-games/end-game" {body :body}
+    (let [score (json/parse-string (slurp body))]
+      (route live-games/end-game score)))
+  (POST "/live-games/cycle-game" {body :body}
+    (let [increment (json/parse-string (slurp body))]
+      (route live-games/cycle-game increment)))
+  (POST "/live-games/set-engine-elo" {body :body}
+    (let [elo (Integer/parseInt (json/parse-string (slurp body)))]
+      (route live-games/set-engine-elo elo)))
+  (POST "/live-games/set-engine-movetime" {body :body}
+    (let [movetime-millis (Integer/parseInt (json/parse-string (slurp body)))
+          movetime (t/millis movetime-millis)]
+      (route live-games/set-engine-movetime movetime))))
 
 (defroutes common-routes
   (GET "/" [] (slurp "front/dist/index.html"))
@@ -156,39 +180,13 @@
       (println mode)
       (global-route change-mode mode))))
 
-;;(POST "/key" {body :body}
-;;      (let [keycode (json/parse-string (slurp body))]
-;;        (case keycode
-;;          "ArrowLeft" (route #(.prevFrame %))
-;;          "ArrowRight" (route #(.nextFrame %))
-;;          ;; ("p" "n" "b" "r" "q" "k" "P" "N" "B" "R" "Q" "K") (do (println (str "Key = " keycode)) (route "Set selected piece" setup/set-selected-piece keycode))
-;;          "l" (do (u/pprint-state @state)
-;;                  (route identity))
-;;          (println (format "Unexpected keyboard event %s" keycode)))))
-;;
-;;(POST "/select-game" {body :body} (let [game-tag (json/parse-string (slurp body))] (route "Select game" games/select-game game-tag)))
-;;(POST "/set-elo" {body :body} (let [elo (Integer/parseInt (json/parse-string (slurp body)))] (route "Set Elo" core/set-elo elo)))
-;;(POST "/reboot-engine" _ (route "Reboot engine" core/reboot-engine!))
-;;(POST "/switch-active-color" _ (route "Switch active color" setup/switch-active-color))
-;;(POST "/save-endgame" _ (route "Save endgame" endgames/save))
-;;(POST "/delete-endgame" _ (route "Delete endgame" endgames/delete))
-;;(POST "/cycle-endgame-class" {body :body} (let [level (json/parse-string (slurp body)) msg (format "Cycle endgame class at level %s" level)] (println (dissoc @state :endgames)) (route msg endgames/cycle-class level)))
-;;(POST "/refine-endgame-class" _ (route "Refine endgame class" endgames/refine-class))
-;;(POST "/next-endgame" _ (route "Next endgame" endgames/next))
-;;(POST "/previous-endgame" _ (route "Previous endgame" endgames/previous))
-;;(POST "/toggle-evaluation" _ (route "Toggle evaluation" endgames/toggle-evaluation))
-;;(POST "/force-move" {body :body} (let [move (json/parse-string (slurp body))] (route "Force move" endgames/force-move move)))
-;;(POST "/new-live-game" {body :body} (let [game-name (json/parse-string (slurp body))] (route "New live game" live-games/new game-name)))
-;;(POST "/cycle-live-game" _ (route "Cycle live game" live-games/cycle-game))
-;;(POST "/save-live-game" _ (route "Save live game" live-games/save))
-;;(POST "/end-live-game" {body :body} (let [result (json/parse-string (slurp body))] (route "End live game" live-games/end result)))
-
 ;; TODO Client should prefix requests with the current mode. Split this up into
 ;; simpler APIs in each mode namespace.
 (defroutes all-routes
   openings-editor-routes
   openings-review-routes
   battle-routes
+  live-games-routes
   common-routes)
 
 ;; When calling a state function from a mode ns, should check that the current mode matches the ns.
@@ -208,65 +206,37 @@
                     wrap-print-url)
                 {:port 3000})))
 
-(comment
-  (do (def s1 @state)
-      (def s2 (openings-editor/init s1))
-      (def s3 (openings-editor/alternative-move s2 "d4"))
-      ;;
-      )
-  (do (def s1 @state)
-      (def s2 (openings-review/init s1))
-      (def s3 (openings-review/next-reportoire s2))
-      (def s4 (openings-review/click-square s3 "E2"))
+;;(defroutes endgames-routes
+;;  (POST "/endgames/coarsen-class" _ (route endgames/coarsen-class))
+;;  (POST "/endgames/refine-class" _ (route endgames/refine-class))
+;;  (POST "/endgames/next-position" _ (route endgames/next-position))
+;;  (POST "/endgames/prev-position" _ (route endgames/prev-position))
+;;  (POST "/endgames/opponent-move" _ (route endgames/prev-position))
+;;  (POST "/endgames/toggle-evaluation" _ (route endgames/toggle-evaluation)))
 
-      (require '[chess-journal3.tree :as tree]
-               '[chess-journal3.chess :as chess])
-      (require)
-      (let [state s3
-            square "E4"
-            {:keys [selected-square
-                    color
-                    tree]} state
-            fen (tree/get-fen tree)
-            {:keys [promote-piece]} state
-            fen (-> state :tree tree/get-fen)
-            san (chess/get-san fen selected-square square :promote-piece promote-piece)
-
-            ;;correct-san (-> tree tree/get-sans u/get-unique)
-            ]
-        fen
-        san
-        (-> tree tree/get-sans ;;u/get-unique
-            )
-        ;;(openings-review/move-to-square-is-correct? state square)
-        )
-
-      (def s5 (openings-review/click-square s4 "E4"))
-      (tree/get-fen (:tree s5))
-      (def s5 (openings-review/opponent-move s4))
-      (def s6 (openings-review/click-square s5 "G1"))
-      (def s7 (openings-review/click-square s6 "F3"))
-      (def s8 (openings-review/opponent-move s7))
-      (def s9 (openings-review/click-square s8 "D2"))
-      (def s10 (openings-review/click-square s9 "D4"))
-      (def s11 (openings-review/opponent-move s10))
-      (def s12 (openings-review/click-square s11 "F1"))
-      (def s13 (openings-review/click-square s12 "C4")))
-  (require '[chess-journal3.fen :as fen])
-  (let [{:keys [tree
-                color]} s12
-        fen (tree/get-fen tree)]
-    (fen/players-move? fen color))
-  (openings-review/move-to-square-is-correct? s12 "C4")
-
-  (def s6 (openings-review/next-line s5))
-
-  (def s6 (openings-review/alternative-move s5 "c6"))
-  (require '[chess-journal3.tree :as tree])
-  (def t (:tree s6))
-  (#'tree/can-go-down? t)
-  ()
-  (tree/get-moves (:tree s6) "rnbqkbnr/pp1ppppp/2p5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2")
-  "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
-  ;;
-  )
+;;(POST "/key" {body :body}
+;;      (let [keycode (json/parse-string (slurp body))]
+;;        (case keycode
+;;          "ArrowLeft" (route #(.prevFrame %))
+;;          "ArrowRight" (route #(.nextFrame %))
+;;          ;; ("p" "n" "b" "r" "q" "k" "P" "N" "B" "R" "Q" "K") (do (println (str "Key = " keycode)) (route "Set selected piece" setup/set-selected-piece keycode))
+;;          "l" (do (u/pprint-state @state)
+;;                  (route identity))
+;;          (println (format "Unexpected keyboard event %s" keycode)))))
+;;
+;;(POST "/select-game" {body :body} (let [game-tag (json/parse-string (slurp body))] (route "Select game" games/select-game game-tag)))
+;;
+;;(POST "/reboot-engine" _ (route "Reboot engine" core/reboot-engine!))
+;;(POST "/switch-active-color" _ (route "Switch active color" setup/switch-active-color))
+;;(POST "/save-endgame" _ (route "Save endgame" endgames/save))
+;;(POST "/delete-endgame" _ (route "Delete endgame" endgames/delete))
+;;(POST "/cycle-endgame-class" {body :body} (let [level (json/parse-string (slurp body)) msg (format "Cycle endgame class at level %s" level)] (println (dissoc @state :endgames)) (route msg endgames/cycle-class level)))
+;;(POST "/refine-endgame-class" _ (route "Refine endgame class" endgames/refine-class))
+;;(POST "/next-endgame" _ (route "Next endgame" endgames/next))
+;;(POST "/previous-endgame" _ (route "Previous endgame" endgames/previous))
+;;(POST "/toggle-evaluation" _ (route "Toggle evaluation" endgames/toggle-evaluation))
+;;(POST "/force-move" {body :body} (let [move (json/parse-string (slurp body))] (route "Force move" endgames/force-move move)))
+;;(POST "/new-live-game" {body :body} (let [game-name (json/parse-string (slurp body))] (route "New live game" live-games/new game-name)))
+;;(POST "/cycle-live-game" _ (route "Cycle live game" live-games/cycle-game))
+;;(POST "/save-live-game" _ (route "Save live game" live-games/save))
+;;(POST "/end-live-game" {body :body} (let [result (json/parse-string (slurp body))] (route "End live game" live-games/end result)))

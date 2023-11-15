@@ -2,6 +2,7 @@
   (:require
     [chess-journal3.constants :refer [username initial-fen]]
     [chess-journal3.move :as move]
+    [chess-journal3.utils :as u]
     [clj-time.core :as t]
     [clojure.java.jdbc :as jdbc]
     [clojure.string :as string])
@@ -105,7 +106,7 @@ CONSTRAINT fk_tag_id
     REFERENCES tags(id),
 UNIQUE(black, white, date, end_time));"))
 
-;; Uniqueness condition???
+;; TODO Add uniqueness condition?
 (defn create-tag-containments-table! [db]
   (jdbc/execute! db "
 CREATE TABLE tag_containments (
@@ -133,12 +134,6 @@ CONSTRAINT fk_position_id
   FOREIGN KEY(position_id)
     REFERENCES positions(id),
 UNIQUE(position_id));"))
-
-;;(defn create-live-games-table! [db]
-;;  (jdbc/execute! db "
-;;CREATE TABLE live_games (
-;;  id INT GENERATED ALWAYS AS IDENTITY,
-;;  tag_id INT NOT NULL,"))
 
 (defn insert-positions! [db fens]
   (let [template "
@@ -251,10 +246,11 @@ FROM games g LEFT JOIN tags t ON g.tag_id = t.id
 WHERE g.result IS NULL
   AND ((g.white = 'user' AND g.black = 'chess-journal3')
        OR (g.black = 'user' AND g.white = 'chess-journal3'));"
-       (jdbc/query db)))
+       (jdbc/query db)
+       (map u/hyphenate-keys)))
 
 (defn complete-live-game [db game-name result]
-  {:pre [(contains? #{"0-1" "1/2-1/2" "1-0"})]}
+  {:pre [(contains? #{"0-1" "1/2-1/2" "1-0"} result)]}
   (let [template "
 WITH v(game_name, result) AS (
   VALUES ('%s', '%s')
@@ -263,14 +259,16 @@ input AS (
   SELECT
     t.id AS tag_id,
     v.result AS result
-  FROM v LEFT JOIN tags t
-    ON v.game_name = t.name
+  FROM v
+    LEFT JOIN tags t
+      ON v.game_name = t.name
 )
 UPDATE games
-SET result = v.result
+SET result = input.result
 FROM input
 WHERE games.tag_id = input.tag_id;"
         sql (format template game-name result)]
+    (println sql)
     (jdbc/execute! db sql)))
 
 ;; TODO Improve this terrible function name.
@@ -356,7 +354,6 @@ FROM v
                     (string/join ", ")
                     (format "(%s)"))
         sql (format template values)]
-    (println sql)
     (jdbc/execute! db sql)))
 
 (defn insert-game! [db metadata moves]
@@ -380,13 +377,13 @@ SELECT t.id, v.black, v.white, v.date
 FROM v LEFT JOIN tags t ON v.tag_name = t.name;"
         {:keys [black white date]} metadata
         sql (format template game-name black white date)]
-    (println sql)
     (jdbc/execute! db sql)))
 
 (defn insert-live-game! [db metadata moves game-name]
   (insert-tag! db game-name)
   (insert-tag-containment! db game-name "live-games")
-  (insert-tagged-moves! db (map #(assoc % :tag game-name) moves))
+  (when (seq moves)
+    (insert-tagged-moves! db (map #(assoc % :tag game-name) moves)))
   (insert-live-game!* db metadata game-name))
 
 (defn insert-endgame! [db {:keys [fen
@@ -429,11 +426,6 @@ WHERE parent.name = '%s'"
         query (format template tag)]
     (map :tag (jdbc/query db query))))
 
-(comment
-  (get-child-tags db "black-games")
-  ;;
-  )
-
 (defn get-tagged-moves [db tag & {:keys [include-child-tags]}]
   (let [children (get-child-tags db tag)
         tags (if include-child-tags
@@ -460,26 +452,6 @@ WHERE t.name IN (%s)
          (map (fn [{:keys [tag san from]}]
                 (move/new-from-san tag from san))))))
 
-(comment
-  ;; Other arity of `get-tagged-moves` not used
-  ([db tag fen]
-   (let [template "
-SELECT
-  m.san AS san,
-  p1.fen AS initial_fen,
-  p2.fen AS final_fen
-FROM tagged_moves tm
-  LEFT JOIN tags t ON tm.tag_id = t.id
-  LEFT JOIN moves m ON tm.move_id = m.id
-  LEFT JOIN positions p1 ON m.initial_position_id = p1.id
-  LEFT JOIN positions p2 ON m.final_position_id = p2.id
-WHERE t.name = '%s'
-  AND p1.fen = '%s';
-"
-         query (format template tag fen)]
-     (map u/hyphenate-keys
-          (jdbc/query db query)))))
-
 (defn get-games [db]
   (jdbc/query db "
 SELECT
@@ -499,8 +471,6 @@ SELECT
 FROM
   games g
     LEFT JOIN tags t ON g.tag_id = t.id;"))
-
-(defn get-all-moves [db tag fen])
 
 (defn get-endgames [db]
   (jdbc/query db "
@@ -576,8 +546,6 @@ FROM tag_containments c
     (insert-tags! db ["live-games"])
     (insert-tags! db ["white-games"
                       "black-games"]))
-  (jdbc/execute! db "ALTER TABLE endgames ADD COLUMN deleted boolean")
-  (jdbc/execute! db "ALTER TABLE endgames DROP COLUMN deleted")
 
   (require '[chess-journal3.pgn :as pgn])
   (def games (vec (pgn/read-file "/Users/pwaters/Downloads/chess_com_games_2022-05-29.pgn")))
@@ -594,10 +562,6 @@ FROM tag_containments c
     )
   ;;
   )
-
-;;ERROR: null value in column "initial_position_id" of relation "moves"
-;;violates not-null constraint Detail: Failing row contains (23057, null, null,
-;;                                                                  d4).
 
 (comment
   ;; 2023-02-26 Re-tag existing white reportoire as 'white-1e4'
@@ -617,29 +581,6 @@ FROM v
   LEFT JOIN moves m
     ON p.id = m.initial_position_id
     AND v.san = m.san;")
-  ;;
-  )
-
-(comment
-  (jdbc/query db "select name from tags order by 1")
-  (jdbc/query db "
-select t2.name
-from tags t1
-     left join tag_containments c on t1.id = c.small_tag_id
-     left join tags t2 on t2.id = c.big_tag_id
-where t1.name = 'test-1'")
-  (jdbc/query db "
-select *
-from tagged_moves tm
-     left join tags t on tm.tag_id = t.id
-where t.name = 'test-1'")
-  (jdbc/query db "
-select g.*
-from games g
-     left join tags t on g.tag_id = t.id
-where t.name = 'test-1'")
-  (insert-live-game!* db {:black "chess-journal3" :white "user" :date "2022-12-11"} "test-1")
-  (list-live-games db)
   ;;
   )
 

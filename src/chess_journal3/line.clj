@@ -64,6 +64,7 @@
        (:sans l)))
 
 (defn new-from-moves [moves]
+  (assert (seq moves))
   (reduce append
           (new-stub (move/tag (first moves))
                     (move/initial-fen (first moves)))
@@ -77,7 +78,9 @@
          sorted-moves []
          current-fen initial-fen]
     (if (empty? unsorted-moves)
-      (new-from-moves sorted-moves)
+      (if (seq sorted-moves)
+        (new-from-moves sorted-moves)
+        (new-stub nil initial-fen))
       (let [next-move (->> unsorted-moves
                            (filter #(= current-fen (move/initial-fen %)))
                            u/get-unique)]
@@ -129,11 +132,14 @@
 
 (defn jump-to-frame [^Line l idx]
   {:pre [(pos? idx)
-         (< idx (length l))]}
+         (<= idx (length l))]}
   (assoc l :idx idx))
 
-(defn jump-to-final-frame [^Line l]
+(defn jump-to-penultimate-frame [^Line l]
   (assoc l :idx (dec (length l))))
+
+(defn jump-to-final-frame [^Line l]
+  (assoc l :idx (length l)))
 
 (defn jump-to-initial-frame [^Line l]
   (assoc l :idx 0))

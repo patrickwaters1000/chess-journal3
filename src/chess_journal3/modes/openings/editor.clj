@@ -173,9 +173,8 @@
       init))
 
 (defn alternative-move [state san]
-  (println (class state))
   (let [t1 (-> (:tree state)
-               tree/jump-to-final-frame)
+               tree/jump-to-penultimate-frame)
         m (->> (tree/get-moves t1)
                (filter #(= san (move/san %)))
                u/get-unique)

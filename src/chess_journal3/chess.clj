@@ -56,19 +56,20 @@
       (Move. from-square to-square promote-piece)
       (Move. from-square to-square))))
 
-;; TODO Handle invalid inputs.
 (defn get-san
+  "Returns Simple Algebraic Notation for the move if the inputs are valid;
+  otherwise returns `nil`."
   [fen from-square to-square & {:keys [promote-piece]}]
-  ;;(println (format "fen=%s, from=%s, to=%s, promote=%s" fen from-square to-square promote-piece))
-  (->> (move-to-object from-square to-square promote-piece)
-       (object-to-san fen)))
+  (try (->> (move-to-object from-square to-square promote-piece)
+            (object-to-san fen))
+       (catch Exception e
+         (println (.getMessage e)))))
 
 ;;-----------------------------------------------------------------------------;;
 ;;-------------                   Applying moves                     ----------;;
 ;;-----------------------------------------------------------------------------;;
 
 (defn apply-san [fen san]
-  (println fen san)
   (let [board (Board.)
         move-list (MoveList. fen)]
     (.loadFromFen board fen)
@@ -95,4 +96,6 @@
    (contains? (set (get-legal-move-sans fen)) san))
   ([fen from-square to-square promote-piece]
    (let [san (get-san fen from-square to-square :promote-piece promote-piece)]
-     (legal-move? fen san))))
+     (if (nil? san)
+       false
+       (legal-move? fen san)))))

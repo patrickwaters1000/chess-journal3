@@ -148,8 +148,8 @@
 (defn prev-frame [^Tree t]
   (update t :line line/prev-frame))
 
-(defn jump-to-final-frame [^Tree t]
-  (update t :line line/jump-to-final-frame))
+(defn jump-to-penultimate-frame [^Tree t]
+  (update t :line line/jump-to-penultimate-frame))
 
 (defn get-moves
   ([^Tree t]
