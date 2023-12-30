@@ -179,7 +179,8 @@ class Page extends React.Component {
         } else if (mode == "battle") {
             buttons = [
                 Button({ name: "battle/set-mode", body: "menu", text: "Exit" }),
-                Button({ name: "battle/set-elo", text: "Set Elo", prompt: "Elo:" }),
+                Button({ name: "battle/set-engine-elo", text: "Set Elo", prompt: "Elo:" }),
+                Button({ name: "battle/set-engine-movetime", text: "Set movetime", prompt: "Time (millis):" }),
                 Button({ name: "battle/reboot-engine", text: "Reboot engine" }),
                 Button({ name: "battle/switch-color", text: "Switch color" }),
                 Button({ name: "battle/cycle-promote-piece", text: `Promotions to ${promotePiece}` }),
