@@ -134,6 +134,7 @@
   (POST "/battle/opponent-move" _ (route battle/opponent-move))
   (POST "/battle/set-engine-elo" {body :body}
     (let [elo (Integer/parseInt (json/parse-string (slurp body)))]
+      (println (format "Setting elo to %d" elo))
       (route battle/set-engine-elo elo)))
   (POST "/battle/set-engine-movetime" {body :body}
     (let [movetime-millis (Integer/parseInt (json/parse-string (slurp body)))

@@ -5,10 +5,29 @@
     [chess-journal3.fen :as fen]
     [chess-journal3.modes.battle :as battle]
     [chess-journal3.utils :as u]
-    [clojure.string :as string]))
+    [clojure.string :as string])
+  (:import
+    (chess_journal3.line Line)
+    (chess_journal3.modes.battle Battle)
+    (chess_journal3.move Move)
+    (chess_journal3.state GlobalState LocalState)))
 
-(defn- set-color [state]
-  (assoc state :color (u/get-active-color state)))
+(defrecord Endgames
+  [^Battle battle
+   db
+   tablebase
+   endgame-infos
+   endgame-idx]
+  LocalState
+  (getMode [_] "endgames")
+  (getFen [_] (.getFen battle))
+  (nextFrame [state] (update state :battle #(.nextFrame %)))
+  (prevFrame [state] (update state :battle #(.prevFrame %)))
+  (switchColor [state] (update state :battle #(.switchColor %)))
+  (clickSquare [state square] (update state :battle #(.clickSquare % square)))
+  (cleanUp [state] (update state :battle #(.cleanUp %)))
+  (getLine [state] (.getLine battle))
+  (makeClientView [state] (assoc (.makeClientView battle) :mode "live-games")))
 
 (def white-pieces #{"K" "Q" "R" "B" "N" "P"})
 (def piece-order {"K" 0 "Q" 1 "R" 2 "B" 3 "N" 4 "P" 5})
@@ -86,12 +105,6 @@
           true
           endgame-class))
 
-(defn- index-of [x xs]
-  (->> xs
-       (map-indexed vector)
-       (filter #(= x (second %)))
-       ffirst))
-
 (defn- cycle-subclass [endgame-class delta endgames]
   (if (empty? endgame-class)
     endgame-class
@@ -103,7 +116,7 @@
                   (map f)
                   (into #{})
                   sort)
-          i1 (index-of v1 vs)
+          i1 (u/index-of-first #(= v1 %) vs)
           i2 (mod (+ i1 delta) (count vs))
           v2 (nth vs i2)]
       (conj branch [f v2]))))
@@ -139,7 +152,7 @@
   (let [fen (u/get-fen state)
         fens (->> (get-endgames-in-current-class state)
                   (map :fen))
-        idx (index-of fen fens)]
+        idx (u/index-of-first #(= fen %) fens)]
     (assoc state :endgame-idx idx)))
 
 (defn- cycle-to-matching-fen-if-possible [state]
@@ -201,7 +214,7 @@
         endgame-idx (->> (:endgames state)
                          (map :fen)
                          (filter #(matches-class? endgame-class %))
-                         (index-of fen))]
+                         (u/index-of-first #(= fen %)))]
     (assoc state
       :endgame-class endgame-class
       :endgame-idx endgame-idx)))
