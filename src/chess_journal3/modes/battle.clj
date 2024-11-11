@@ -12,6 +12,7 @@
     [clj-time.core :as t])
   (:import
     (chess_journal3.line Line)
+    (chess_journal3.move Move)
     (chess_journal3.state GlobalState LocalState)))
 
 (declare click-square
@@ -61,7 +62,7 @@
      :activeColor (fen/get-active-color fen)
      :promotePiece promote-piece}))
 
-(defn- get-fen [state]
+(defn get-fen [state]
   (line/fen (.line state)))
 
 ;; TODO Handle game over
@@ -86,15 +87,20 @@
      :engine-elo 1800
      :engine-movetime (t/seconds 10)}))
 
-(defn opponent-move [^Battle state]
-  (let [{:keys [engine
-                engine-movetime
-                engine-elo]} state
-        fen (get-fen state)
-        move (.getMove engine fen engine-elo engine-movetime)]
-    (-> state
-        (update :line line/apply-move move)
-        (assoc :opponent-must-move false))))
+;; Multiple arities allows forcing an opponent move. This is used in endgame
+;; modes for using a tablebase instead of the engine.
+(defn opponent-move
+  ([^Battle state]
+   (let [{:keys [engine
+                 engine-movetime
+                 engine-elo]} state
+         fen (get-fen state)
+         move (.getMove engine fen engine-elo engine-movetime)]
+     (opponent-move state move)))
+  ([^Battle state ^Move move]
+   (-> state
+       (update :line line/apply-move move)
+       (assoc :opponent-must-move false))))
 
 (defn click-square [^Battle state square]
   (let [{:keys [selected-square

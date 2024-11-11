@@ -99,3 +99,14 @@
      (if (nil? san)
        false
        (legal-move? fen san)))))
+
+(defn valid-fen? [fen]
+  (try (do (doall (get-legal-move-sans fen))
+           true)
+       (catch Exception _
+         false)))
+
+(defn is-check? [fen]
+  (let [board (Board.)]
+    (.loadFromFen board fen)
+    (.isKingAttacked board)))

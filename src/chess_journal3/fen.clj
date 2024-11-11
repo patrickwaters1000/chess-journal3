@@ -138,3 +138,8 @@
 
 (defn active-player-has-piece-on-square? [fen square]
   (player-has-piece-on-square? fen (get-active-color fen) square))
+
+(defn reverse-active-color [fen]
+  (case (string/includes? fen "w")
+    true (string/replace fen "w" "b")
+    false (string/replace fen "b" "w")))

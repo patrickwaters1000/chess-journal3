@@ -6,6 +6,7 @@
     [chess-journal3.engine :as engine]
     [chess-journal3.fen :as fen]
     [chess-journal3.modes.battle :as battle]
+    [chess-journal3.modes.endgames.rook-vs-pawn :as rook-vs-pawn]
     ;;[chess-journal3.modes.endgames :as endgames]
     ;;[chess-journal3.modes.games :as games]
     [chess-journal3.modes.live-games :as live-games]
@@ -70,12 +71,14 @@
                   ;;"games" games/init
                   ;;"setup" setup/init
                   ;;"endgames" endgames/init
-                  "live-games" live-games/init)
+                  "live-games" live-games/init
+                  "rook-vs-pawn" rook-vs-pawn/init)
         local-state (init-fn app-state)]
     (-> app-state
         (assoc-in [:mode->local-state mode] local-state)
         (assoc :mode mode))))
 
+;; Why is this not in the live games mode ns???
 (defn- create-live-game [app-state game-name]
   (let [^Battle local-state (s/get-local-state app-state)
         db (.db app-state)
@@ -167,6 +170,21 @@
           movetime (t/millis movetime-millis)]
       (route live-games/set-engine-movetime movetime))))
 
+(defroutes rook-vs-pawn-routes
+  (POST "/rook-vs-pawn/key" {body :body}
+    (let [keycode (json/parse-string (slurp body))]
+      (case keycode
+        "ArrowLeft" (route #(.prevFrame %))
+        "ArrowRight" (route #(.nextFrame %))
+        (println (format "Unexpected keyboard event %s" keycode)))))
+  (POST "/rook-vs-pawn/opponent-move" _ (route rook-vs-pawn/opponent-move))
+  (POST "/rook-vs-pawn/force-move" {body :body}
+    (let [san (json/parse-string (slurp body))]
+      (route rook-vs-pawn/force-move san)))
+  (POST "/rook-vs-pawn/next-position" _ (route rook-vs-pawn/cycle-fen 1))
+  (POST "/rook-vs-pawn/prev-position" _ (route rook-vs-pawn/cycle-fen -1))
+  (POST "/rook-vs-pawn/hint" _ (route rook-vs-pawn/hint)))
+
 (defroutes common-routes
   (GET "/" [] (slurp "front/dist/index.html"))
   (GET "/main.js" [] (slurp "front/dist/main.js"))
@@ -188,6 +206,7 @@
   openings-review-routes
   battle-routes
   live-games-routes
+  rook-vs-pawn-routes
   common-routes)
 
 ;; When calling a state function from a mode ns, should check that the current mode matches the ns.

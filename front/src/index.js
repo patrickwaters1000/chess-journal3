@@ -22,6 +22,9 @@ const event = (name, body) => {
         if (newState.error) {
             window.alert(newState.error);
         }
+        if (newState.hint) {
+            window.alert(newState.hint);
+        }
         handle.setState(newState);
         if (newState.opponentMustMove) {
             event(newState.mode+'/opponent-move');
@@ -141,6 +144,7 @@ class Page extends React.Component {
               liveGameName,
               endgameEvaluation,
               openingReportoire,
+              fenCounter,
             } = this.state;
         let buttons;
         if (mode == "menu") {
@@ -152,6 +156,7 @@ class Page extends React.Component {
                 Button({ name: "set-mode", body: "battle", text: "Battle" }),
                 Button({ name: "set-mode", body: "games", text: "Games" }),
                 Button({ name: "set-mode", body: "live-games", text: "Saved games" }),
+                Button({ name: "set-mode", body: "rook-vs-pawn", text: "Endgames: rook vs pawn" }),
             ];
         } else if (mode == "openings-editor") {
             buttons = [
@@ -226,6 +231,14 @@ class Page extends React.Component {
                 Button({ name: "live-games/end-game", text: "End game", prompt: "Result" }),
                 Button({ name: "live-games/save-game", text: "Save game" }),
                 //Button({ name: "switch-color", text: `You are ${playerColor.toUpperCase()}` }),
+            ];
+        } else if (mode == "rook-vs-pawn") {
+            buttons = [
+                Button({ name: "set-mode", body: "menu", text: "Exit" }),
+                Button({ name: "rook-vs-pawn/prev-position", text: "<" }),
+                Button({ name: "rook-vs-pawn/next-position", text: fenCounter }),
+                Button({ name: "rook-vs-pawn/force-move", prompt: "Input san:", text: "Force move" }),
+                Button({ name: "rook-vs-pawn/hint", text: "Hint" }),
             ];
         } else {
             buttons = [];

@@ -1,6 +1,8 @@
 import sys
 import chess.syzygy
 
+# pip install python-chess
+
 def probe_tablebase(board):
   tablebase = chess.syzygy.open_tablebase("tablebase/zyzygy_tables")
   wdl = tablebase.probe_wdl(board)
